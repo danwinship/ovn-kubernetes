@@ -290,6 +290,22 @@ func (oc *Controller) addLogicalPort(pod *kapi.Pod) {
 	}
 	oc.addPodToNamespaceAddressSet(pod.Namespace, addresses[1])
 
+	if oc.nodePortEnable {
+		// Add HortPort mappings
+		for _, c := range pod.Spec.Containers {
+			for _, port := range c.Ports {
+				if port.HostPort == 0 {
+					continue
+				}
+
+				err = oc.createNodeVIP(logicalSwitch, string(port.Protocol), port.HostPort, port.ContainerPort, []string{addresses[1]})
+				if err != nil {
+					logrus.Errorf("Error in creating HostPort for pod %s, node port: %d - %v\n", pod.Name, port.HostPort, err)
+				}
+			}
+		}
+	}
+
 	return
 }
 

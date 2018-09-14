@@ -40,17 +40,7 @@ func (ovn *Controller) getGatewayLoadBalancer(physicalGateway,
 	return loadBalancer, nil
 }
 
-func (ovn *Controller) createGatewaysVIP(protocol string, port, targetPort int32, ips []string) error {
-
-	logrus.Debugf("Creating Gateway VIP - %s, %s, %d, %v", protocol, port, targetPort, ips)
-
-	// Each gateway has a separate load-balancer for N/S traffic
-
-	physicalGateways, _, err := ovn.getOvnGateways()
-	if err != nil {
-		return err
-	}
-
+func (ovn *Controller) createGatewaysVIPForGateways(physicalGateways []string, protocol string, port, targetPort int32, ips []string) error {
 	for _, physicalGateway := range physicalGateways {
 		physicalIP, err := ovn.getGatewayPhysicalIP(physicalGateway)
 		if err != nil {
@@ -80,4 +70,24 @@ func (ovn *Controller) createGatewaysVIP(protocol string, port, targetPort int32
 		}
 	}
 	return nil
+}
+
+func (ovn *Controller) createGatewaysVIP(protocol string, port, targetPort int32, ips []string) error {
+
+	logrus.Debugf("Creating Gateway VIP - %s, %s, %d, %v", protocol, port, targetPort, ips)
+
+	physicalGateways, _, err := ovn.getOvnGateways()
+	if err != nil {
+		return err
+	}
+	return ovn.createGatewaysVIPForGateways(physicalGateways, protocol, port, targetPort, ips)
+}
+
+func (ovn *Controller) createNodeVIP(nodeName, protocol string, port, targetPort int32, ips []string) error {
+
+	logrus.Infof("Creating Single Gateway VIP - %s, %s, %s, %d, %v", nodeName, protocol, port, targetPort, ips)
+
+	// FIXME
+	physicalGateway := "GR_"+nodeName
+	return ovn.createGatewaysVIPForGateways([]string{physicalGateway}, protocol, port, targetPort, ips)
 }
