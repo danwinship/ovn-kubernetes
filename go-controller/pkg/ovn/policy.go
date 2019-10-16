@@ -48,14 +48,11 @@ type gressPolicy struct {
 	policyType knet.PolicyType
 	idx        int
 
-	// peerAddressSets points to all the addressSets that hold
-	// the peer pod's IP addresses. We will have one addressSet for
-	// local pods and multiple addressSets that each represent a
-	// peer namespace
-	peerAddressSets map[string]bool
-
-	// sortedPeerAddressSets has the sorted peerAddressSets
-	sortedPeerAddressSets []string
+	// peerAddressSets is a sorted list of all the addressSets that hold the
+	// peer pod's IP addresses, in the form used in match rules (ie, with a
+	// "$" prefix). We will have one addressSet for local pods and multiple
+	// addressSets that each represent a peer namespace
+	peerAddressSets []string
 
 	// portPolicies represents all the ports to which traffic is allowed for
 	// the rule in question.
@@ -85,13 +82,12 @@ func (pp *portPolicy) getL4Match() (string, error) {
 
 func newGressPolicy(policyType knet.PolicyType, idx int) *gressPolicy {
 	return &gressPolicy{
-		policyType:            policyType,
-		idx:                   idx,
-		peerAddressSets:       make(map[string]bool),
-		sortedPeerAddressSets: make([]string, 0),
-		portPolicies:          make([]*portPolicy, 0),
-		ipBlockCidr:           make([]string, 0),
-		ipBlockExcept:         make([]string, 0),
+		policyType:      policyType,
+		idx:             idx,
+		peerAddressSets: make([]string, 0),
+		portPolicies:    make([]*portPolicy, 0),
+		ipBlockCidr:     make([]string, 0),
+		ipBlockExcept:   make([]string, 0),
 	}
 }
 
@@ -115,17 +111,11 @@ func ipMatch() string {
 }
 
 func (gp *gressPolicy) getL3MatchFromAddressSet() string {
-	var l3Match, addresses string
-	for _, addressSet := range gp.sortedPeerAddressSets {
-		if addresses == "" {
-			addresses = fmt.Sprintf("$%s", addressSet)
-			continue
-		}
-		addresses = fmt.Sprintf("%s, $%s", addresses, addressSet)
-	}
-	if addresses == "" {
+	var l3Match string
+	if len(gp.peerAddressSets) == 0 {
 		l3Match = ipMatch()
 	} else {
+		addresses := strings.Join(gp.peerAddressSets, ", ")
 		if gp.policyType == knet.PolicyTypeIngress {
 			l3Match = fmt.Sprintf("%s.src == {%s}", ipMatch(), addresses)
 		} else {
@@ -158,36 +148,40 @@ func (gp *gressPolicy) getMatchFromIPBlock(lportMatch, l4Match string) string {
 	return match
 }
 
+// findString searches sortedItems for item. If found, it returns its index and true. If
+// not found, it returns the index where it could be inserted, and false.
+func findString(sortedItems []string, item string) (int, bool) {
+	i := sort.SearchStrings(sortedItems, item)
+	return i, (i < len(sortedItems) && sortedItems[i] == item)
+}
+
 func (gp *gressPolicy) addAddressSet(hashedAddressSet string) (string, string, bool) {
-	if gp.peerAddressSets[hashedAddressSet] {
+	match := "$" + hashedAddressSet
+	i, exists := findString(gp.peerAddressSets, match)
+	if exists {
 		return "", "", false
 	}
 
 	oldL3Match := gp.getL3MatchFromAddressSet()
-
-	gp.sortedPeerAddressSets = append(gp.sortedPeerAddressSets, hashedAddressSet)
-	sort.Strings(gp.sortedPeerAddressSets)
-	gp.peerAddressSets[hashedAddressSet] = true
+	gp.peerAddressSets = append(
+		gp.peerAddressSets[:i],
+		append([]string{match},
+			gp.peerAddressSets[i:]...)...)
 
 	return oldL3Match, gp.getL3MatchFromAddressSet(), true
 }
 
 func (gp *gressPolicy) delAddressSet(hashedAddressSet string) (string, string, bool) {
-	if !gp.peerAddressSets[hashedAddressSet] {
+	match := "$" + hashedAddressSet
+	i, exists := findString(gp.peerAddressSets, match)
+	if !exists {
 		return "", "", false
 	}
 
 	oldL3Match := gp.getL3MatchFromAddressSet()
-
-	for i, addressSet := range gp.sortedPeerAddressSets {
-		if addressSet == hashedAddressSet {
-			gp.sortedPeerAddressSets = append(
-				gp.sortedPeerAddressSets[:i],
-				gp.sortedPeerAddressSets[i+1:]...)
-			break
-		}
-	}
-	delete(gp.peerAddressSets, hashedAddressSet)
+	gp.peerAddressSets = append(
+		gp.peerAddressSets[:i],
+		gp.peerAddressSets[i+1:]...)
 
 	return oldL3Match, gp.getL3MatchFromAddressSet(), true
 }
@@ -492,7 +486,7 @@ func localPodAddACL(np *namespacePolicy, gress *gressPolicy) {
 		}
 		// if there are pod/namespace selector, then allow packets from/to that address_set or
 		// if the NetworkPolicyPeer is empty, then allow from all sources or to all destinations.
-		if len(gress.sortedPeerAddressSets) > 0 || len(gress.ipBlockCidr) == 0 {
+		if len(gress.peerAddressSets) > 0 || len(gress.ipBlockCidr) == 0 {
 			addACLAllow(np, match, l4Match, false, gress.idx, gress.policyType)
 		}
 	}
@@ -508,7 +502,7 @@ func localPodAddACL(np *namespacePolicy, gress *gressPolicy) {
 			cidrMatch = gress.getMatchFromIPBlock(lportMatch, l4Match)
 			addACLAllow(np, cidrMatch, l4Match, true, gress.idx, gress.policyType)
 		}
-		if len(gress.sortedPeerAddressSets) > 0 || len(gress.ipBlockCidr) == 0 {
+		if len(gress.peerAddressSets) > 0 || len(gress.ipBlockCidr) == 0 {
 			addACLAllow(np, match, l4Match, false, gress.idx, gress.policyType)
 		}
 	}
