@@ -155,8 +155,8 @@ func findString(sortedItems []string, item string) (int, bool) {
 	return i, (i < len(sortedItems) && sortedItems[i] == item)
 }
 
-func (gp *gressPolicy) addAddressSet(hashedAddressSet string) (string, string, bool) {
-	match := "$" + hashedAddressSet
+func (gp *gressPolicy) addAddressSet(ref *AddressSetRef) (string, string, bool) {
+	match := "$" + ref.HashedName
 	i, exists := findString(gp.peerAddressSets, match)
 	if exists {
 		return "", "", false
@@ -171,8 +171,8 @@ func (gp *gressPolicy) addAddressSet(hashedAddressSet string) (string, string, b
 	return oldL3Match, gp.getL3MatchFromAddressSet(), true
 }
 
-func (gp *gressPolicy) delAddressSet(hashedAddressSet string) (string, string, bool) {
-	match := "$" + hashedAddressSet
+func (gp *gressPolicy) delAddressSet(ref *AddressSetRef) (string, string, bool) {
+	match := "$" + ref.HashedName
 	i, exists := findString(gp.peerAddressSets, match)
 	if !exists {
 		return "", "", false
@@ -221,17 +221,18 @@ func (oc *Controller) syncNetworkPolicies(networkPolicies []interface{}) {
 		}
 	}
 
-	err := oc.forEachAddressSetUnhashedName(func(addrSetName, namespaceName,
-		policyName string) {
-		if policyName != "" &&
-			!expectedPolicies[namespaceName][policyName] {
+	err := oc.forEachAddressSet(func(ref *AddressSetRef) {
+		if ref.OwnerType != "NetworkPolicy" {
+			return
+		}
+		if !expectedPolicies[ref.OwnerNamespace][ref.OwnerName] {
 			// policy doesn't exist on k8s. Delete the port group
-			portGroupName := fmt.Sprintf("%s_%s", namespaceName, policyName)
+			portGroupName := fmt.Sprintf("%s_%s", ref.OwnerNamespace, ref.OwnerName)
 			hashedLocalPortGroup := hashedPortGroup(portGroupName)
 			deletePortGroup(hashedLocalPortGroup)
 
 			// delete the address sets for this policy from OVN
-			deleteAddressSet(hashedAddressSet(addrSetName))
+			deleteAddressSet(ref)
 		}
 	})
 	if err != nil {
@@ -549,8 +550,8 @@ func (oc *Controller) createDefaultDenyPortGroup(policyType knet.PolicyType) err
 // Creates the match string used for ACLs allowing incoming multicast into a
 // namespace, that is, from IPs that are in the namespace's address set.
 func getMulticastACLMatch(ns string) string {
-	nsAddressSet := hashedAddressSet(ns)
-	return "ip4.src == $" + nsAddressSet + " && ip4.mcast"
+	nsAddressSet := newAddressSetRef("Namespace", false, ns, "")
+	return "ip4.src == $" + nsAddressSet.HashedName + " && ip4.mcast"
 }
 
 // Returns the multicast port group name and hash for namespace 'ns'.
@@ -591,7 +592,7 @@ func (oc *Controller) createMulticastAllowPolicy(ns string, nsInfo *namespaceInf
 	}
 
 	// Add all ports from this namespace to the multicast allow group.
-	for _, portName := range nsInfo.addressSet {
+	for _, portName := range nsInfo.podPortByIP {
 		if portInfo, err := oc.logicalPortCache.get(portName); err != nil {
 			klog.Errorf(err.Error())
 		} else if err := podAddAllowMulticastPolicy(ns, portInfo); err != nil {
@@ -957,7 +958,7 @@ func (oc *Controller) addNetworkPolicy(policy *knet.NetworkPolicy) {
 		gress             *gressPolicy
 		namespaceSelector *metav1.LabelSelector
 		podSelector       *metav1.LabelSelector
-		addrSet           string
+		addrSet           *AddressSetRef
 		peerMap           map[string]bool
 	}
 	var policyHandlers []policyHandler
@@ -973,19 +974,17 @@ func (oc *Controller) addNetworkPolicy(policy *knet.NetworkPolicy) {
 			ingress.addPortPolicy(&portJSON)
 		}
 
-		hashedLocalAddressSet := ""
+		var localPeerPods *AddressSetRef
 		// peerPodAddressMap represents the IP addresses of all the peer pods
 		// for this ingress.
 		peerPodAddressMap := make(map[string]bool)
 		if hasAnyLabelSelector(ingressJSON.From) {
 			// localPeerPods represents all the peer pods in the same
 			// namespace from which we need to allow traffic.
-			localPeerPods := fmt.Sprintf("%s.%s.%s.%d", policy.Namespace,
-				policy.Name, "ingress", i)
-
-			hashedLocalAddressSet = hashedAddressSet(localPeerPods)
-			createAddressSet(localPeerPods, hashedLocalAddressSet, nil)
-			ingress.addAddressSet(hashedLocalAddressSet)
+			localPeerPods = newAddressSetRef("NetworkPolicy", config.IPv6Mode,
+				policy.Namespace, policy.Name, "ingress", fmt.Sprintf("%d", i))
+			createAddressSet(localPeerPods, nil)
+			ingress.addAddressSet(localPeerPods)
 		}
 
 		for _, fromJSON := range ingressJSON.From {
@@ -1002,7 +1001,7 @@ func (oc *Controller) addNetworkPolicy(policy *knet.NetworkPolicy) {
 				gress:             ingress,
 				namespaceSelector: fromJSON.NamespaceSelector,
 				podSelector:       fromJSON.PodSelector,
-				addrSet:           hashedLocalAddressSet,
+				addrSet:           localPeerPods,
 				peerMap:           peerPodAddressMap,
 			}
 			policyHandlers = append(policyHandlers, ingressPolicyHandler)
@@ -1022,19 +1021,17 @@ func (oc *Controller) addNetworkPolicy(policy *knet.NetworkPolicy) {
 			egress.addPortPolicy(&portJSON)
 		}
 
-		hashedLocalAddressSet := ""
+		var localPeerPods *AddressSetRef
 		// peerPodAddressMap represents the IP addresses of all the peer pods
 		// for this egress.
 		peerPodAddressMap := make(map[string]bool)
 		if hasAnyLabelSelector(egressJSON.To) {
 			// localPeerPods represents all the peer pods in the same
-			// namespace to which we need to allow traffic.
-			localPeerPods := fmt.Sprintf("%s.%s.%s.%d", policy.Namespace,
-				policy.Name, "egress", i)
-
-			hashedLocalAddressSet = hashedAddressSet(localPeerPods)
-			createAddressSet(localPeerPods, hashedLocalAddressSet, nil)
-			egress.addAddressSet(hashedLocalAddressSet)
+			// namespace from which we need to allow traffic.
+			localPeerPods = newAddressSetRef("NetworkPolicy", config.IPv6Mode,
+				policy.Namespace, policy.Name, "egress", fmt.Sprintf("%d", i))
+			createAddressSet(localPeerPods, nil)
+			egress.addAddressSet(localPeerPods)
 		}
 
 		for _, toJSON := range egressJSON.To {
@@ -1051,7 +1048,7 @@ func (oc *Controller) addNetworkPolicy(policy *knet.NetworkPolicy) {
 				gress:             egress,
 				namespaceSelector: toJSON.NamespaceSelector,
 				podSelector:       toJSON.PodSelector,
-				addrSet:           hashedLocalAddressSet,
+				addrSet:           localPeerPods,
 				peerMap:           peerPodAddressMap,
 			}
 			policyHandlers = append(policyHandlers, egressPolicyHandler)
@@ -1128,18 +1125,16 @@ func (oc *Controller) deleteNetworkPolicy(policy *knet.NetworkPolicy) {
 	// Go through each ingress rule.  For each ingress rule, delete the
 	// addressSet for the local peer pods.
 	for i := range np.ingressPolicies {
-		localPeerPods := fmt.Sprintf("%s.%s.%s.%d", policy.Namespace,
-			policy.Name, "ingress", i)
-		hashedAddressSet := hashedAddressSet(localPeerPods)
-		deleteAddressSet(hashedAddressSet)
+		localPeerPods := newAddressSetRef("NetworkPolicy", config.IPv6Mode,
+			policy.Namespace, policy.Name, "ingress", fmt.Sprintf("%d", i))
+		deleteAddressSet(localPeerPods)
 	}
 	// Go through each egress rule.  For each egress rule, delete the
 	// addressSet for the local peer pods.
 	for i := range np.egressPolicies {
-		localPeerPods := fmt.Sprintf("%s.%s.%s.%d", policy.Namespace,
-			policy.Name, "egress", i)
-		hashedAddressSet := hashedAddressSet(localPeerPods)
-		deleteAddressSet(hashedAddressSet)
+		localPeerPods := newAddressSetRef("NetworkPolicy", config.IPv6Mode,
+			policy.Namespace, policy.Name, "egress", fmt.Sprintf("%d", i))
+		deleteAddressSet(localPeerPods)
 	}
 }
 
@@ -1147,7 +1142,7 @@ func (oc *Controller) deleteNetworkPolicy(policy *knet.NetworkPolicy) {
 // selected as a peer by a NetworkPolicy's ingress/egress section to that
 // ingress/egress address set
 func (oc *Controller) handlePeerPodSelectorAddUpdate(np *namespacePolicy,
-	addressMap map[string]bool, addressSet string, obj interface{}) {
+	addressMap map[string]bool, addressSet *AddressSetRef, obj interface{}) {
 
 	pod := obj.(*kapi.Pod)
 	podAnnotation, err := util.UnmarshalPodAnnotation(pod.Annotations)
@@ -1184,7 +1179,7 @@ func (oc *Controller) handlePeerPodSelectorDeleteACLRules(obj interface{}, gress
 // matches a NetworkPolicy ingress/egress section's selectors from that
 // ingress/egress address set
 func (oc *Controller) handlePeerPodSelectorDelete(np *namespacePolicy,
-	addressMap map[string]bool, addressSet string, obj interface{}) {
+	addressMap map[string]bool, addressSet *AddressSetRef, obj interface{}) {
 
 	pod := obj.(*kapi.Pod)
 	podAnnotation, err := util.UnmarshalPodAnnotation(pod.Annotations)
@@ -1210,7 +1205,7 @@ func (oc *Controller) handlePeerPodSelectorDelete(np *namespacePolicy,
 
 func (oc *Controller) handlePeerPodSelector(
 	policy *knet.NetworkPolicy, podSelector *metav1.LabelSelector,
-	addressSet string, addressMap map[string]bool, np *namespacePolicy) {
+	addressSet *AddressSetRef, addressMap map[string]bool, np *namespacePolicy) {
 
 	h, err := oc.watchFactory.AddFilteredPodHandler(policy.Namespace,
 		podSelector,
@@ -1234,7 +1229,7 @@ func (oc *Controller) handlePeerPodSelector(
 	np.podHandlerList = append(np.podHandlerList, h)
 }
 
-func (oc *Controller) handlePeerNamespaceAndPodSelector(policy *knet.NetworkPolicy, gress *gressPolicy, namespaceSelector *metav1.LabelSelector, podSelector *metav1.LabelSelector, addressSet string, addressMap map[string]bool, np *namespacePolicy) {
+func (oc *Controller) handlePeerNamespaceAndPodSelector(policy *knet.NetworkPolicy, gress *gressPolicy, namespaceSelector *metav1.LabelSelector, podSelector *metav1.LabelSelector, addressSet *AddressSetRef, addressMap map[string]bool, np *namespacePolicy) {
 	namespaceHandler, err := oc.watchFactory.AddFilteredNamespaceHandler("",
 		namespaceSelector,
 		cache.ResourceEventHandlerFuncs{
@@ -1306,8 +1301,8 @@ func (oc *Controller) handlePeerNamespaceSelector(
 				if np.deleted {
 					return
 				}
-				hashedAddressSet := hashedAddressSet(namespace.Name)
-				oldL3Match, newL3Match, added := gress.addAddressSet(hashedAddressSet)
+				addressSet := newAddressSetRef("Namespace", config.IPv6Mode, namespace.Name, "")
+				oldL3Match, newL3Match, added := gress.addAddressSet(addressSet)
 				if added {
 					modifyFn(gress, np, oldL3Match, newL3Match)
 				}
@@ -1319,8 +1314,8 @@ func (oc *Controller) handlePeerNamespaceSelector(
 				if np.deleted {
 					return
 				}
-				hashedAddressSet := hashedAddressSet(namespace.Name)
-				oldL3Match, newL3Match, removed := gress.delAddressSet(hashedAddressSet)
+				addressSet := newAddressSetRef("Namespace", config.IPv6Mode, namespace.Name, "")
+				oldL3Match, newL3Match, removed := gress.delAddressSet(addressSet)
 				if removed {
 					modifyFn(gress, np, oldL3Match, newL3Match)
 				}

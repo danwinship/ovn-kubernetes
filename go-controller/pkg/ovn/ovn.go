@@ -51,8 +51,11 @@ type loadBalancerConf struct {
 type namespaceInfo struct {
 	sync.Mutex
 
+	// Address set containing all pods in the namespace
+	addressSet *AddressSetRef
+
 	// map from pod IP address to logical port name for all pods
-	addressSet map[string]string
+	podPortByIP map[string]string
 
 	// map from NetworkPolicy name to namespacePolicy. You must hold the
 	// namespaceInfo's mutex to add/delete/lookup policies, but must hold the

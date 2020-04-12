@@ -1251,12 +1251,12 @@ var _ = Describe("OVN NetworkPolicy Low-Level Operations", func() {
 	It("computes match strings from address sets correctly", func() {
 		gp := newGressPolicy(knet.PolicyTypeIngress, 0)
 
-		one := hashedAddressSet(fmt.Sprintf("testing.policy.ingress.1"))
-		two := hashedAddressSet(fmt.Sprintf("testing.policy.ingress.2"))
-		three := hashedAddressSet(fmt.Sprintf("testing.policy.ingress.3"))
-		four := hashedAddressSet(fmt.Sprintf("testing.policy.ingress.4"))
-		five := hashedAddressSet(fmt.Sprintf("testing.policy.ingress.5"))
-		six := hashedAddressSet(fmt.Sprintf("testing.policy.ingress.6"))
+		one := newAddressSetRef("NetworkPolicy", false, "testing", "policy", "ingress", "1")
+		two := newAddressSetRef("NetworkPolicy", false, "testing", "policy", "ingress", "2")
+		three := newAddressSetRef("NetworkPolicy", false, "testing", "policy", "ingress", "3")
+		four := newAddressSetRef("NetworkPolicy", false, "testing", "policy", "ingress", "4")
+		five := newAddressSetRef("NetworkPolicy", false, "testing", "policy", "ingress", "5")
+		six := newAddressSetRef("NetworkPolicy", false, "testing", "policy", "ingress", "6")
 
 		oldMatch, newMatch, changed := gp.addAddressSet(one)
 		Expect(oldMatch).To(Equal("ip4"))

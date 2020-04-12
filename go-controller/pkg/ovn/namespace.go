@@ -7,6 +7,8 @@ import (
 	kapi "k8s.io/api/core/v1"
 	utilwait "k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/klog"
+
+	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/config"
 )
 
 const (
@@ -24,12 +26,12 @@ func (oc *Controller) syncNamespaces(namespaces []interface{}) {
 		}
 		expectedNs[ns.Name] = true
 	}
+	expectedNs[""] = true
 
-	err := oc.forEachAddressSetUnhashedName(func(addrSetName,
-		namespaceName, nameSuffix string) {
-		if nameSuffix == "" && !expectedNs[namespaceName] {
+	err := oc.forEachAddressSet(func(ref *AddressSetRef) {
+		if !expectedNs[ref.OwnerNamespace] {
 			// delete the address sets for this namespace from OVN
-			deleteAddressSet(hashedAddressSet(addrSetName))
+			deleteAddressSet(ref)
 		}
 	})
 	if err != nil {
@@ -45,13 +47,13 @@ func (oc *Controller) addPodToNamespace(ns string, portInfo *lpInfo) error {
 	defer nsInfo.Unlock()
 
 	// If pod has already been added, nothing to do.
-	address := portInfo.ip.String()
-	if nsInfo.addressSet[address] != "" {
+	podIP := portInfo.ip.String()
+	if nsInfo.podPortByIP[podIP] != "" {
 		return nil
 	}
 
-	nsInfo.addressSet[address] = portInfo.name
-	addToAddressSet(hashedAddressSet(ns), address)
+	nsInfo.podPortByIP[podIP] = portInfo.name
+	addToAddressSet(nsInfo.addressSet, podIP)
 
 	// If multicast is allowed and enabled for the namespace, add the port
 	// to the allow policy.
@@ -71,13 +73,13 @@ func (oc *Controller) deletePodFromNamespace(ns string, portInfo *lpInfo) error 
 	}
 	defer nsInfo.Unlock()
 
-	address := portInfo.ip.String()
-	if nsInfo.addressSet[address] == "" {
+	podIP := portInfo.ip.String()
+	if nsInfo.podPortByIP[podIP] == "" {
 		return nil
 	}
 
-	delete(nsInfo.addressSet, address)
-	removeFromAddressSet(hashedAddressSet(ns), address)
+	delete(nsInfo.podPortByIP, podIP)
+	removeFromAddressSet(nsInfo.addressSet, podIP)
 
 	// Remove the port from the multicast allow policy.
 	if oc.multicastSupport && nsInfo.multicastEnabled {
@@ -145,7 +147,7 @@ func (oc *Controller) AddNamespace(ns *kapi.Namespace) {
 		for _, pod := range existingPods {
 			if pod.Status.PodIP != "" && !pod.Spec.HostNetwork {
 				portName := podLogicalPortName(pod)
-				nsInfo.addressSet[pod.Status.PodIP] = portName
+				nsInfo.podPortByIP[pod.Status.PodIP] = portName
 				addresses = append(addresses, pod.Status.PodIP)
 			}
 		}
@@ -153,7 +155,7 @@ func (oc *Controller) AddNamespace(ns *kapi.Namespace) {
 
 	// Create an address_set for the namespace.  All the pods' IP address
 	// in the namespace will be added to the address_set
-	createAddressSet(ns.Name, hashedAddressSet(ns.Name), addresses)
+	createAddressSet(nsInfo.addressSet, addresses)
 
 	oc.multicastUpdateNamespace(ns, nsInfo)
 }
@@ -180,7 +182,7 @@ func (oc *Controller) deleteNamespace(ns *kapi.Namespace) {
 	}
 	defer nsInfo.Unlock()
 
-	deleteAddressSet(hashedAddressSet(ns.Name))
+	deleteAddressSet(nsInfo.addressSet)
 	oc.multicastDeleteNamespace(ns, nsInfo)
 }
 
@@ -236,7 +238,8 @@ func (oc *Controller) createNamespaceLocked(ns string) *namespaceInfo {
 	defer oc.namespacesMutex.Unlock()
 
 	nsInfo := &namespaceInfo{
-		addressSet:       make(map[string]string),
+		addressSet:       newAddressSetRef("Namespace", config.IPv6Mode, ns, ""),
+		podPortByIP:      make(map[string]string),
 		networkPolicies:  make(map[string]*namespacePolicy),
 		multicastEnabled: false,
 	}
