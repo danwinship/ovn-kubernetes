@@ -1,6 +1,7 @@
 package util
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 
@@ -15,20 +16,36 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-// ParseHybridOverlayHostSubnet returns the parsed hybrid overlay hostsubnet if
-// the annotations included a valid one, or nil if they did not include one. If
-// one was included, but it is invalid, an error is returned.
-func ParseHybridOverlayHostSubnet(node *kapi.Node) (*net.IPNet, error) {
-	sub, ok := node.Annotations[types.HybridOverlayNodeSubnet]
+// ParseHybridOverlayHostSubnets returns the parsed hybrid overlay hostsubnet(s) if there
+// is a valid annotation, or nil if there is no annotation. If one was included, but it is
+// invalid, an error is returned.
+func ParseHybridOverlayHostSubnets(node *kapi.Node) ([]*net.IPNet, error) {
+	annotation, ok := node.Annotations[types.HybridOverlayNodeSubnet]
 	if !ok {
 		return nil, nil
 	}
-	_, subnet, err := net.ParseCIDR(sub)
+	// Try old single-stack form first
+	if _, subnet, err := net.ParseCIDR(annotation); err == nil {
+		return []*net.IPNet{subnet}, nil
+	}
+
+	var subnetStrings []string
+	err := json.Unmarshal([]byte(annotation), &subnetStrings)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing node %s annotation %s value %q: %v",
-			node.Name, types.HybridOverlayNodeSubnet, sub, err)
+			node.Name, types.HybridOverlayNodeSubnet, annotation, err)
 	}
-	return subnet, nil
+
+	subnets := make([]*net.IPNet, len(subnetStrings))
+	for i, sub := range subnetStrings {
+		_, subnets[i], err = net.ParseCIDR(sub)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing node %s annotation %s value %q: %v",
+				node.Name, types.HybridOverlayNodeSubnet, sub, err)
+		}
+	}
+
+	return subnets, nil
 }
 
 // IsHybridOverlayNode returns true if the node has been labeled as a

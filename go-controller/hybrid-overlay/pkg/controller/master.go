@@ -107,13 +107,15 @@ func NewMaster(kube kube.Interface,
 		return nil, fmt.Errorf("error in initializing/fetching subnets: %v", err)
 	}
 	for _, node := range existingNodes.Items {
-		hostsubnet, err := houtil.ParseHybridOverlayHostSubnet(&node)
+		hostsubnets, err := houtil.ParseHybridOverlayHostSubnets(&node)
 		if err != nil {
 			klog.Warningf(err.Error())
-		} else if hostsubnet != nil {
-			klog.V(5).Infof("Marking existing node %s hybrid overlay NodeSubnet %s as allocated", node.Name, hostsubnet)
-			if err := m.allocator.MarkAllocatedNetwork(hostsubnet); err != nil {
-				utilruntime.HandleError(err)
+		} else {
+			for _, hostsubnet := range hostsubnets {
+				klog.V(5).Infof("Marking existing node %s hybrid overlay NodeSubnet %s as allocated", node.Name, hostsubnet)
+				if err := m.allocator.MarkAllocatedNetwork(hostsubnet); err != nil {
+					utilruntime.HandleError(err)
+				}
 			}
 		}
 	}
@@ -149,12 +151,12 @@ func (m *MasterController) Run(stopCh <-chan struct{}) {
 	klog.Info("Shutting down workers")
 }
 
-// hybridOverlayNodeEnsureSubnet allocates a subnet and sets the
-// hybrid overlay subnet annotation. It returns any newly allocated subnet
-// or an error. If an error occurs, the newly allocated subnet will be released.
-func (m *MasterController) hybridOverlayNodeEnsureSubnet(node *kapi.Node, annotator kube.Annotator) (*net.IPNet, error) {
-	// Do not allocate a subnet if the node already has one
-	if subnet, _ := houtil.ParseHybridOverlayHostSubnet(node); subnet != nil {
+// hybridOverlayNodeEnsureSubnets allocates subnets and sets the
+// hybrid overlay subnet annotation. It returns any newly allocated subnets
+// or an error. If an error occurs, the newly allocated subnets will be released.
+func (m *MasterController) hybridOverlayNodeEnsureSubnets(node *kapi.Node, annotator kube.Annotator) ([]*net.IPNet, error) {
+	// Do not allocate subnets if they are already allocated
+	if subnets, _ := houtil.ParseHybridOverlayHostSubnets(node); subnets != nil {
 		return nil, nil
 	}
 
@@ -164,21 +166,24 @@ func (m *MasterController) hybridOverlayNodeEnsureSubnet(node *kapi.Node, annota
 		return nil, fmt.Errorf("error allocating hybrid overlay HostSubnet for node %s: %v", node.Name, err)
 	}
 
-	if err := annotator.Set(types.HybridOverlayNodeSubnet, hostsubnets[0].String()); err != nil {
-		_ = m.allocator.ReleaseNetwork(hostsubnets[0])
+	if err := annotator.Set(types.HybridOverlayNodeSubnet, hostsubnets); err != nil {
+		for _, hostsubnet := range hostsubnets {
+			_ = m.allocator.ReleaseNetwork(hostsubnet)
+		}
 		return nil, err
 	}
 
-	klog.Infof("Allocated hybrid overlay HostSubnet %s for node %s", hostsubnets[0], node.Name)
-	return hostsubnets[0], nil
+	klog.Infof("Allocated hybrid overlay HostSubnets %s for node %s", util.JoinIPNets(hostsubnets, ","), node.Name)
+	return hostsubnets, nil
 }
 
-func (m *MasterController) releaseNodeSubnet(nodeName string, subnet *net.IPNet) error {
-	if err := m.allocator.ReleaseNetwork(subnet); err != nil {
-		return fmt.Errorf("error deleting hybrid overlay HostSubnet %s for node %q: %s", subnet, nodeName, err)
+func (m *MasterController) releaseNodeSubnets(nodeName string, subnets []*net.IPNet) {
+	for _, subnet := range subnets {
+		if err := m.allocator.ReleaseNetwork(subnet); err != nil {
+			klog.Warningf("error deleting hybrid overlay HostSubnet %s for node %q: %s", subnet, nodeName, err)
+		}
 	}
-	klog.Infof("Deleted hybrid overlay HostSubnet %s for node %s", subnet, nodeName)
-	return nil
+	klog.Infof("Deleted hybrid overlay HostSubnets %s for node %s", util.JoinIPNets(subnets, ","), nodeName)
 }
 
 func (m *MasterController) handleOverlayPort(node *kapi.Node, annotator kube.Annotator) error {
@@ -250,10 +255,10 @@ func (m *MasterController) deleteOverlayPort(node *kapi.Node) {
 func (m *MasterController) AddNode(node *kapi.Node) error {
 	annotator := kube.NewNodeAnnotator(m.kube, node)
 
-	var allocatedSubnet *net.IPNet
+	var allocatedSubnets []*net.IPNet
 	if houtil.IsHybridOverlayNode(node) {
 		var err error
-		allocatedSubnet, err = m.hybridOverlayNodeEnsureSubnet(node, annotator)
+		allocatedSubnets, err = m.hybridOverlayNodeEnsureSubnets(node, annotator)
 		if err != nil {
 			return fmt.Errorf("failed to update node %q hybrid overlay subnet annotation: %v", node.Name, err)
 		}
@@ -265,8 +270,8 @@ func (m *MasterController) AddNode(node *kapi.Node) error {
 
 	if err := annotator.Run(); err != nil {
 		// Release allocated subnet if any errors occurred
-		if allocatedSubnet != nil {
-			_ = m.releaseNodeSubnet(node.Name, allocatedSubnet)
+		if allocatedSubnets != nil {
+			m.releaseNodeSubnets(node.Name, allocatedSubnets)
 		}
 		return fmt.Errorf("failed to set hybrid overlay annotations for %s: %v", node.Name, err)
 	}
@@ -275,10 +280,8 @@ func (m *MasterController) AddNode(node *kapi.Node) error {
 
 // DeleteNode handles node deletions
 func (m *MasterController) DeleteNode(node *kapi.Node) error {
-	if subnet, _ := houtil.ParseHybridOverlayHostSubnet(node); subnet != nil {
-		if err := m.releaseNodeSubnet(node.Name, subnet); err != nil {
-			return err
-		}
+	if subnets, _ := houtil.ParseHybridOverlayHostSubnets(node); subnets != nil {
+		m.releaseNodeSubnets(node.Name, subnets)
 	}
 
 	if _, ok := node.Annotations[types.HybridOverlayDRMAC]; ok && !houtil.IsHybridOverlayNode(node) {
