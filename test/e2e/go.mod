@@ -119,8 +119,6 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.0.2 // indirect
-	github.com/openshift/api v0.0.0-20230807132801-600991d550ac // indirect
-	github.com/openshift/client-go v0.0.0-20230503144108-75015d2347cb // indirect
 	github.com/openshift/custom-resource-status v1.1.2 // indirect
 	github.com/pborman/uuid v1.2.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
@@ -154,7 +152,6 @@ require (
 	go.opentelemetry.io/proto/otlp v0.19.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.25.0 // indirect
-	golang.org/x/crypto v0.14.0 // indirect
 	golang.org/x/exp v0.0.0-20230811145659-89c5cff77bcb // indirect
 	golang.org/x/mod v0.11.0 // indirect
 	golang.org/x/net v0.17.0 // indirect
@@ -202,8 +199,11 @@ require (
 	github.com/docker/docker v24.0.7+incompatible
 	github.com/google/goexpect v0.0.0-20210430020637-ab937bf7fd6f
 	github.com/openshift-kni/k8sreporter v1.0.4
+	github.com/openshift/api v0.0.0-20230807132801-600991d550ac
+	github.com/openshift/client-go v0.0.0-20230503144108-75015d2347cb
 	github.com/ovn-org/ovn-kubernetes/go-controller v0.0.0-20230925224008-53d1c137b5ad
 	go.universe.tf/metallb v0.0.0-00010101000000-000000000000
+	golang.org/x/crypto v0.14.0
 	google.golang.org/grpc v1.56.3
 	kubevirt.io/api v1.0.0
 	sigs.k8s.io/controller-runtime v0.16.3

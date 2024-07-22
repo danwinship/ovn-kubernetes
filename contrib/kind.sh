@@ -535,8 +535,8 @@ set_default_params() {
   KIND_DNS_DOMAIN=${KIND_DNS_DOMAIN:-"cluster.local"}
   KIND_CONFIG=${KIND_CONFIG:-${DIR}/kind.yaml.j2}
   KIND_REMOVE_TAINT=${KIND_REMOVE_TAINT:-true}
-  KIND_IPV4_SUPPORT=${KIND_IPV4_SUPPORT:-true}
-  KIND_IPV6_SUPPORT=${KIND_IPV6_SUPPORT:-false}
+  KIND_IPV4_SUPPORT=${PLATFORM_IPV4_SUPPORT:-true}
+  KIND_IPV6_SUPPORT=${PLATFORM_IPV6_SUPPORT:-false}
   ENABLE_IPSEC=${ENABLE_IPSEC:-false}
   OVN_HYBRID_OVERLAY_ENABLE=${OVN_HYBRID_OVERLAY_ENABLE:-false}
   OVN_DISABLE_SNAT_MULTIPLE_GWS=${OVN_DISABLE_SNAT_MULTIPLE_GWS:-false}
@@ -1408,7 +1408,7 @@ function install_kubevirt() {
             kubectl logs --all-containers=true -n kubevirt $p || true
         done
     fi
-    
+
     if [ ! -d "./bin" ]
     then
         mkdir -p ./bin

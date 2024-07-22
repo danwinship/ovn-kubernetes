@@ -15,6 +15,7 @@ import (
 	"github.com/ovn-org/ovn-kubernetes/test/e2e/deployment"
 	"github.com/ovn-org/ovn-kubernetes/test/e2e/diagnostics"
 	"github.com/ovn-org/ovn-kubernetes/test/e2e/ipalloc"
+	"github.com/ovn-org/ovn-kubernetes/test/e2e/provider"
 
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
@@ -53,8 +54,9 @@ var _ = ginkgo.BeforeSuite(func() {
 	framework.ExpectNotEqual(framework.TestContext.KubeConfig, "", fmt.Sprintf("%s env var not set", clientcmd.RecommendedConfigPathEnvVar))
 	kClientSet, err := framework.LoadClientset()
 	framework.ExpectNoError(err)
-	_, err = framework.LoadConfig()
+	config, err := framework.LoadConfig()
 	framework.ExpectNoError(err)
+	provider.Set(config)
 	deployment.Set()
 	err = ipalloc.InitPrimaryIPAllocator(kClientSet.CoreV1().Nodes())
 	framework.ExpectNoError(err, "failed to initialize node primary IP allocator")
@@ -71,7 +73,8 @@ func TestMain(m *testing.M) {
 		}
 		os.Exit(0)
 	}
-
+	// reset provider to skeleton as Kubernetes test framework expects a supported provider
+	framework.TestContext.Provider = "skeleton"
 	framework.AfterReadingAllFlags(&framework.TestContext)
 
 	// TODO: Deprecating repo-root over time... instead just use gobindata_util.go , see #23987.

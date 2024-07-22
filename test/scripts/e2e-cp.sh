@@ -47,8 +47,8 @@ ipv4 pod"
 
 SKIPPED_TESTS=""
 
-if [ "$KIND_IPV4_SUPPORT" == true ]; then
-    if  [ "$KIND_IPV6_SUPPORT" == true ]; then
+if [ "$PLATFORM_IPV4_SUPPORT" == true ]; then
+    if  [ "$PLATFORM_IPV6_SUPPORT" == true ]; then
 	# No support for these features in dual-stack yet
 	SKIPPED_TESTS="hybrid.overlay|external.gateway"
     else
@@ -58,7 +58,7 @@ if [ "$KIND_IPV4_SUPPORT" == true ]; then
     fi
 fi
 
-if [ "$KIND_IPV4_SUPPORT" == false ]; then
+if [ "$PLATFORM_IPV4_SUPPORT" == false ]; then
   SKIPPED_TESTS+="\[IPv4\]"
 fi
 
@@ -79,7 +79,7 @@ else
   e2e br-int NetFlow export validation"
 fi
 
-if [ "$KIND_IPV6_SUPPORT" == true ]; then
+if [ "$PLATFORM_IPV6_SUPPORT" == true ]; then
   if [ "$SKIPPED_TESTS" != "" ]; then
   	SKIPPED_TESTS+="|"
   fi

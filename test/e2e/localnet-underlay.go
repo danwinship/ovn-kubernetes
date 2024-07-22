@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ovn-org/ovn-kubernetes/test/e2e/deployment"
+	"github.com/ovn-org/ovn-kubernetes/test/e2e/provider"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -69,7 +70,7 @@ func ovsPods(clientSet clientset.Interface) []v1.Pod {
 }
 
 func addOVSBridge(ovnNodeName string, bridgeName string) error {
-	_, err := runCommand(ovsBridgeCommand(ovnNodeName, add, bridgeName)...)
+	_, err := provider.Get().ExecK8NodeCommand(ovnNodeName, []string{"ovs-vsctl", add, bridgeName})
 	if err != nil {
 		return fmt.Errorf("failed to ADD OVS bridge %s: %v", bridgeName, err)
 	}
@@ -77,27 +78,16 @@ func addOVSBridge(ovnNodeName string, bridgeName string) error {
 }
 
 func removeOVSBridge(ovnNodeName string, bridgeName string) error {
-	_, err := runCommand(ovsBridgeCommand(ovnNodeName, del, bridgeName)...)
+	_, err := provider.Get().ExecK8NodeCommand(ovnNodeName, []string{"ovs-vsctl", del, bridgeName})
 	if err != nil {
 		return fmt.Errorf("failed to DELETE OVS bridge %s: %v", bridgeName, err)
 	}
 	return nil
 }
 
-func ovsBridgeCommand(ovnNodeName string, addOrDeleteCmd string, bridgeName string) []string {
-	return []string{
-		"kubectl", "-n", deployment.Get().OVNKubernetesNamespace(), "exec", ovnNodeName, "--",
-		"ovs-vsctl", addOrDeleteCmd, bridgeName,
-	}
-}
-
 func ovsAttachPortToBridge(ovsNodeName string, bridgeName string, portName string) error {
-	cmd := []string{
-		"kubectl", "-n", deployment.Get().OVNKubernetesNamespace(), "exec", ovsNodeName, "--",
-		"ovs-vsctl", "add-port", bridgeName, portName,
-	}
-
-	if _, err := runCommand(cmd...); err != nil {
+	_, err := provider.Get().ExecK8NodeCommand(ovsNodeName, []string{"ovs-vsctl", "add-port", bridgeName, portName})
+	if err != nil {
 		return fmt.Errorf("failed to add port %s to OVS bridge %s: %v", portName, bridgeName, err)
 	}
 
@@ -105,12 +95,8 @@ func ovsAttachPortToBridge(ovsNodeName string, bridgeName string, portName strin
 }
 
 func ovsEnableVLANAccessPort(ovsNodeName string, bridgeName string, portName string, vlanID int) error {
-	cmd := []string{
-		"kubectl", "-n", deployment.Get().OVNKubernetesNamespace(), "exec", ovsNodeName, "--",
-		"ovs-vsctl", "add-port", bridgeName, portName, fmt.Sprintf("tag=%d", vlanID), "vlan_mode=access",
-	}
-
-	if _, err := runCommand(cmd...); err != nil {
+	_, err := provider.Get().ExecK8NodeCommand(ovsNodeName, []string{"ovs-vsctl", "add-port", bridgeName, portName, fmt.Sprintf("tag=%d", vlanID), "vlan_mode=access"})
+	if err != nil {
 		return fmt.Errorf("failed to add port %s to OVS bridge %s: %v", portName, bridgeName, err)
 	}
 
@@ -142,10 +128,11 @@ func Map[T, V any](items []T, fn func(T) V) []V {
 
 func configureBridgeMappings(ovnNodeName string, mappings ...BridgeMapping) error {
 	mappingsString := fmt.Sprintf("external_ids:ovn-bridge-mappings=%s", BridgeMappings(mappings).String())
-	cmd := []string{"kubectl", "-n", deployment.Get().OVNKubernetesNamespace(), "exec", ovnNodeName,
-		"--", "ovs-vsctl", "set", "open", ".", mappingsString,
+	_, err := provider.Get().ExecK8NodeCommand(ovnNodeName, []string{"ovs-vsctl", "set", "open", ".", mappingsString})
+	if err != nil {
+		return fmt.Errorf("failed to configure bridge mapping(s): %v", err)
 	}
-	_, err := runCommand(cmd...)
+
 	return err
 }
 
