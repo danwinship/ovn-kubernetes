@@ -13,6 +13,8 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 
+	"github.com/ovn-org/ovn-kubernetes/test/e2e/images"
+
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -582,7 +584,7 @@ spec:
 		framework.ExpectNoError(err, "failed to validate endpoints for service %s in namespace: %s", serviceName, f.Namespace.Name)
 
 		nodeIP := serverNodeInfo.nodeIP
-		externalContainerIPV4, externalContainerIPV6 := createClusterExternalContainer(externalContainerName, agnhostImage,
+		externalContainerIPV4, externalContainerIPV6 := createClusterExternalContainer(externalContainerName, images.AgnHost(),
 			[]string{"--network", ciNetworkName, "-p", fmt.Sprintf("%d:%d", externalContainerPort, externalContainerPort)},
 			[]string{"netexec", fmt.Sprintf("--http-port=%d", externalContainerPort)})
 		defer deleteClusterExternalContainer(externalContainerName)

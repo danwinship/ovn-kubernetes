@@ -14,6 +14,8 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 
+	"github.com/ovn-org/ovn-kubernetes/test/e2e/images"
+
 	"github.com/google/go-cmp/cmp"
 	nettypes "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	v1 "k8s.io/api/core/v1"
@@ -134,7 +136,7 @@ var _ = ginkgo.Describe("External Gateway", func() {
 			ciWorkerNodeSrc := nodes.Items[0].Name
 
 			// start the container that will act as an external gateway
-			_, err = runCommand(containerRuntime, "run", "-itd", "--privileged", "--network", externalContainerNetwork, "--name", gwContainerNameAlt1, agnhostImage)
+			_, err = runCommand(containerRuntime, "run", "-itd", "--privileged", "--network", externalContainerNetwork, "--name", gwContainerNameAlt1, images.AgnHost())
 			if err != nil {
 				framework.Failf("failed to start external gateway test container %s: %v", gwContainerNameAlt1, err)
 			}
@@ -208,7 +210,7 @@ var _ = ginkgo.Describe("External Gateway", func() {
 				framework.Failf("Failed to ping the first gateway network %s from container %s on node %s: %v", exGWRemoteIpAlt1, ovnContainer, ciWorkerNodeSrc, err)
 			}
 			// start the container that will act as a new external gateway that the tests will be updated to use
-			_, err = runCommand(containerRuntime, "run", "-itd", "--privileged", "--network", externalContainerNetwork, "--name", gwContainerNameAlt2, agnhostImage)
+			_, err = runCommand(containerRuntime, "run", "-itd", "--privileged", "--network", externalContainerNetwork, "--name", gwContainerNameAlt2, images.AgnHost())
 			if err != nil {
 				framework.Failf("failed to start external gateway test container %s: %v", gwContainerNameAlt2, err)
 			}
@@ -321,7 +323,7 @@ var _ = ginkgo.Describe("External Gateway", func() {
 
 			// start the first container that will act as an external gateway
 			_, err := runCommand(containerRuntime, "run", "-itd", "--privileged", "--network", externalContainerNetwork,
-				"--name", gwContainer, agnhostImage)
+				"--name", gwContainer, images.AgnHost())
 			if err != nil {
 				framework.Failf("failed to start external gateway test container %s: %v", gwContainer, err)
 			}
@@ -2922,13 +2924,13 @@ func setupGatewayContainersForConntrackTest(f *framework.Framework, nodes *v1.No
 	addressesv4 := gatewayTestIPs{gatewayIPs: make([]string, 2)}
 	addressesv6 := gatewayTestIPs{gatewayIPs: make([]string, 2)}
 	ginkgo.By("Creating the gateway containers for the UDP test")
-	addressesv4.gatewayIPs[0], addressesv6.gatewayIPs[0] = createClusterExternalContainer(gwContainer1, iperf3Image, []string{"-itd", "--privileged", "--network", externalContainerNetwork}, []string{})
-	addressesv4.gatewayIPs[1], addressesv6.gatewayIPs[1] = createClusterExternalContainer(gwContainer2, iperf3Image, []string{"-itd", "--privileged", "--network", externalContainerNetwork}, []string{})
+	addressesv4.gatewayIPs[0], addressesv6.gatewayIPs[0] = createClusterExternalContainer(gwContainer1, images.IPerf3(), []string{"-itd", "--privileged", "--network", externalContainerNetwork}, []string{})
+	addressesv4.gatewayIPs[1], addressesv6.gatewayIPs[1] = createClusterExternalContainer(gwContainer2, images.IPerf3(), []string{"-itd", "--privileged", "--network", externalContainerNetwork}, []string{})
 
 	node := nodes.Items[0]
 	ginkgo.By("Creating the source pod to reach the destination ips from")
 	clientPod, err = createPod(f, srcPodName, node.Name, f.Namespace.Name, []string{}, map[string]string{}, func(p *v1.Pod) {
-		p.Spec.Containers[0].Image = iperf3Image
+		p.Spec.Containers[0].Image = images.IPerf3()
 	})
 	framework.ExpectNoError(err)
 

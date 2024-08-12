@@ -17,6 +17,8 @@ import (
 	"github.com/onsi/ginkgo/v2/dsl/table"
 	"github.com/onsi/gomega"
 
+	"github.com/ovn-org/ovn-kubernetes/test/e2e/images"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/kubernetes/test/e2e/framework"
@@ -442,7 +444,7 @@ var _ = ginkgo.Describe("e2e egress IP validation", func() {
 		for _, nodeName := range nodesToAttachNet {
 			attachNetwork(secondaryNetworkName, nodeName)
 		}
-		v4Addr, v6Addr := createClusterExternalContainer(targetSecondaryNode.name, "docker.io/httpd", []string{"--network", secondaryNetworkName, "-P"}, []string{})
+		v4Addr, v6Addr := createClusterExternalContainer(targetSecondaryNode.name, images.HTTPD(), []string{"--network", secondaryNetworkName, "-P"}, []string{})
 		if v4Addr == "" && !v6 {
 			panic("failed to get v4 address")
 		}
@@ -509,13 +511,13 @@ var _ = ginkgo.Describe("e2e egress IP validation", func() {
 		}
 		isV6 := utilnet.IsIPv6String(egress1Node.nodeIP)
 		if isV6 {
-			_, targetNode.nodeIP = createClusterExternalContainer(targetNode.name, "docker.io/httpd", []string{"--network", ciNetworkName, "-P"}, []string{})
-			_, deniedTargetNode.nodeIP = createClusterExternalContainer(deniedTargetNode.name, "docker.io/httpd", []string{"--network", ciNetworkName, "-P"}, []string{})
+			_, targetNode.nodeIP = createClusterExternalContainer(targetNode.name, images.HTTPD(), []string{"--network", ciNetworkName, "-P"}, []string{})
+			_, deniedTargetNode.nodeIP = createClusterExternalContainer(deniedTargetNode.name, images.HTTPD(), []string{"--network", ciNetworkName, "-P"}, []string{})
 			// configure and add additional network to worker containers for EIP multi NIC feature
 			_, targetSecondaryNode.nodeIP = configNetworkAndGetTarget(secondaryIPV6Subnet, []string{egress1Node.name, egress2Node.name}, isV6)
 		} else {
-			targetNode.nodeIP, _ = createClusterExternalContainer(targetNode.name, "docker.io/httpd", []string{"--network", ciNetworkName, "-P"}, []string{})
-			deniedTargetNode.nodeIP, _ = createClusterExternalContainer(deniedTargetNode.name, "docker.io/httpd", []string{"--network", ciNetworkName, "-P"}, []string{})
+			targetNode.nodeIP, _ = createClusterExternalContainer(targetNode.name, images.HTTPD(), []string{"--network", ciNetworkName, "-P"}, []string{})
+			deniedTargetNode.nodeIP, _ = createClusterExternalContainer(deniedTargetNode.name, images.HTTPD(), []string{"--network", ciNetworkName, "-P"}, []string{})
 			// configure and add additional network to worker containers for EIP multi NIC feature
 			targetSecondaryNode.nodeIP, _ = configNetworkAndGetTarget(secondaryIPV4Subnet, []string{egress1Node.name, egress2Node.name}, isV6)
 		}
@@ -788,7 +790,7 @@ spec:
 		ginkgo.By("2. Creating host-networked pod, on non-egress node acting as \"another node\"")
 		_, err = createPod(f, egress2Node.name+"-host-net-pod", egress2Node.name, f.Namespace.Name, []string{}, map[string]string{}, func(p *corev1.Pod) {
 			p.Spec.HostNetwork = true
-			p.Spec.Containers[0].Image = "docker.io/httpd"
+			p.Spec.Containers[0].Image = images.HTTPD()
 		})
 		framework.ExpectNoError(err)
 		hostNetPod := node{
@@ -1811,7 +1813,7 @@ spec:
 		targetNode.name = externalKindContainerName
 		externalKindIPv4, _ := createClusterExternalContainer(
 			externalKindContainerName,
-			agnhostImage,
+			images.AgnHost(),
 			[]string{"--privileged", "--network", "kind"},
 			[]string{"pause"},
 		)

@@ -17,6 +17,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/ovn-org/ovn-kubernetes/test/e2e/images"
+
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -39,7 +41,6 @@ var _ = Describe("Node IP and MAC address migration", func() {
 		pollingInterval            = 10
 		settleTimeout              = 10
 		egressIPYaml               = "egressip.yaml"
-		externalContainerImage     = "registry.k8s.io/e2e-test-images/agnhost:2.26"
 		ciNetworkName              = "kind"
 		externalContainerName      = "ip-migration-external"
 		externalContainerPort      = "80"
@@ -130,7 +131,7 @@ spec:
 		By("Creating a cluster external container")
 		externalContainerIPs = make(map[int]string)
 		externalContainerIPs[4], externalContainerIPs[6] = createClusterExternalContainer(externalContainerName,
-			externalContainerImage, []string{"--network", ciNetworkName, "-P"}, externalContainerCommand)
+			images.AgnHost(), []string{"--network", ciNetworkName, "-P"}, externalContainerCommand)
 	})
 
 	AfterEach(func() {
