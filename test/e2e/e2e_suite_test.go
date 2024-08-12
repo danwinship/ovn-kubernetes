@@ -11,7 +11,9 @@ import (
 	"github.com/onsi/ginkgo/v2/config"
 	"github.com/onsi/ginkgo/v2/reporters"
 	"github.com/onsi/gomega"
+
 	"github.com/ovn-org/ovn-kubernetes/test/e2e/diagnostics"
+
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
 	"k8s.io/kubernetes/test/e2e/framework"
