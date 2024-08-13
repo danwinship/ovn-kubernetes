@@ -12,6 +12,7 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 
+	"github.com/ovn-org/ovn-kubernetes/test/e2e/deployment"
 	"github.com/ovn-org/ovn-kubernetes/test/e2e/images"
 
 	"golang.org/x/sync/errgroup"
@@ -389,12 +390,13 @@ spec:
 				// TODO(mk): replace with non-repeating IP allocator
 				otherDstIP = "172.18.1.1"
 			}
-			_, err = runCommand(containerRuntime, "exec", dstNode.Name, "ip", "addr", "add", otherDstIP, "dev", "breth0")
+			extBridgeName := deployment.Get().ExternalBridgeName()
+			_, err = runCommand(containerRuntime, "exec", dstNode.Name, "ip", "addr", "add", otherDstIP, "dev", extBridgeName)
 			if err != nil {
 				framework.Failf("failed to add address to node %s: %v", dstNode.Name, err)
 			}
 			defer func() {
-				_, err = runCommand(containerRuntime, "exec", dstNode.Name, "ip", "addr", "delete", otherDstIP, "dev", "breth0")
+				_, err = runCommand(containerRuntime, "exec", dstNode.Name, "ip", "addr", "delete", otherDstIP, "dev", extBridgeName)
 				if err != nil {
 					framework.Failf("failed to remove address from node %s: %v", dstNode.Name, err)
 				}

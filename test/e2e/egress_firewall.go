@@ -13,6 +13,7 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 
+	"github.com/ovn-org/ovn-kubernetes/test/e2e/deployment"
 	"github.com/ovn-org/ovn-kubernetes/test/e2e/images"
 
 	v1 "k8s.io/api/core/v1"
@@ -110,7 +111,7 @@ var _ = ginkgo.Describe("e2e egress firewall policy validation", func() {
 		for nodeName, ipFamilies := range node2ndaryIPs {
 			for _, ip := range ipFamilies {
 				_, err := runCommand(containerRuntime, "exec", nodeName, "ip", "addr", "delete",
-					fmt.Sprintf("%s/32", ip), "dev", "breth0")
+					fmt.Sprintf("%s/32", ip), "dev", deployment.Get().ExternalBridgeName())
 				if err != nil && !strings.Contains(err.Error(),
 					"RTNETLINK answers: Cannot assign requested address") {
 					framework.Failf("failed to remove ip address %s from node %s, err: %q", ip, nodeName, err)
@@ -343,11 +344,12 @@ spec:
 		}
 
 		ginkgo.By("Adding additional IP addresses to node on which source pod lives")
+		extBridgeName := deployment.Get().ExternalBridgeName()
 		for nodeName, ipFamilies := range node2ndaryIPs {
 			for _, ip := range ipFamilies {
 				// manually add the a secondary IP to each node
 				framework.Logf("Adding IP %s to node %s", ip, nodeName)
-				_, err = runCommand(containerRuntime, "exec", nodeName, "ip", "addr", "add", ip, "dev", "breth0")
+				_, err = runCommand(containerRuntime, "exec", nodeName, "ip", "addr", "add", ip, "dev", extBridgeName)
 				if err != nil && !strings.Contains(err.Error(), "Address already assigned") {
 					framework.Failf("failed to add new IP address %s to node %s: %v", ip, nodeName, err)
 				}

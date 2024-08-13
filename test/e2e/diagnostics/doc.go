@@ -19,7 +19,7 @@ d                  = diagnostics.New(fr)
 ```golang
 
 	d.ConntrackDumpingDaemonSet()
-	d.OVSFlowsDumpingDaemonSet("breth0")
+	d.OVSFlowsDumpingDaemonSet("breth0") // FIXME breth0?
 	d.IPTablesDumpingDaemonSet()
 
 ```
@@ -28,6 +28,7 @@ And add tcpdump to the test place where the expression can be composed, for exam
 
 ```golang
 
+	// FIXME breth0?
 	d.TCPDumpDaemonSet([]string{"any", "eth0", "breth0"}, fmt.Sprintf("port %s or port %s", port, nodePort))
 
 ```

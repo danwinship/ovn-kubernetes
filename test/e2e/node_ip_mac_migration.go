@@ -17,6 +17,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/ovn-org/ovn-kubernetes/test/e2e/deployment"
 	"github.com/ovn-org/ovn-kubernetes/test/e2e/images"
 
 	v1 "k8s.io/api/core/v1"
@@ -223,7 +224,7 @@ spec:
 						true)
 					Expect(err).NotTo(HaveOccurred())
 
-					ovnkubeNodePods, err := f.ClientSet.CoreV1().Pods("ovn-kubernetes").List(context.TODO(), metav1.ListOptions{
+					ovnkubeNodePods, err := f.ClientSet.CoreV1().Pods(deployment.Get().OVNKubernetesNamespace()).List(context.TODO(), metav1.ListOptions{
 						LabelSelector: "app=ovnkube-node",
 						FieldSelector: "spec.nodeName=" + workerNode.Name,
 					})
@@ -260,7 +261,7 @@ spec:
 							By("Setting rollbackNeeded to true")
 							rollbackNeeded = true
 
-							ovnkubeNodePods, err := f.ClientSet.CoreV1().Pods("ovn-kubernetes").List(context.TODO(), metav1.ListOptions{
+							ovnkubeNodePods, err := f.ClientSet.CoreV1().Pods(deployment.Get().OVNKubernetesNamespace()).List(context.TODO(), metav1.ListOptions{
 								LabelSelector: "app=ovnkube-node",
 								FieldSelector: "spec.nodeName=" + workerNode.Name,
 							})
@@ -360,7 +361,7 @@ spec:
 							By("Setting rollbackNeeded to true")
 							rollbackNeeded = true
 
-							ovnkubeNodePods, err := f.ClientSet.CoreV1().Pods("ovn-kubernetes").List(context.TODO(), metav1.ListOptions{
+							ovnkubeNodePods, err := f.ClientSet.CoreV1().Pods(deployment.Get().OVNKubernetesNamespace()).List(context.TODO(), metav1.ListOptions{
 								LabelSelector: "app=ovnkube-node",
 								FieldSelector: "spec.nodeName=" + workerNode.Name,
 							})
@@ -439,7 +440,7 @@ spec:
 					assignedNodePort = svc.Spec.Ports[0].NodePort
 
 					// find the ovn-kube node pod on this node
-					pods, err := f.ClientSet.CoreV1().Pods("ovn-kubernetes").List(context.TODO(), metav1.ListOptions{
+					pods, err := f.ClientSet.CoreV1().Pods(deployment.Get().OVNKubernetesNamespace()).List(context.TODO(), metav1.ListOptions{
 						LabelSelector: "app=ovnkube-node",
 						FieldSelector: "spec.nodeName=" + workerNode.Name,
 					})
@@ -447,6 +448,7 @@ spec:
 					Expect(pods.Items).To(HaveLen(1))
 					ovnkPod = pods.Items[0]
 
+					// FIXME breth0?
 					cmd := "ovs-ofctl dump-flows breth0 table=0"
 					err = wait.PollImmediate(framework.Poll, 30*time.Second, func() (bool, error) {
 						stdout, err := e2epodoutput.RunHostCmdWithRetries(ovnkPod.Namespace, ovnkPod.Name, cmd, framework.Poll, 30*time.Second)
@@ -489,7 +491,7 @@ spec:
 							By("Setting rollbackNeeded to true")
 							rollbackNeeded = true
 
-							ovnkubeNodePods, err := f.ClientSet.CoreV1().Pods("ovn-kubernetes").List(context.TODO(), metav1.ListOptions{
+							ovnkubeNodePods, err := f.ClientSet.CoreV1().Pods(deployment.Get().OVNKubernetesNamespace()).List(context.TODO(), metav1.ListOptions{
 								LabelSelector: "app=ovnkube-node",
 								FieldSelector: "spec.nodeName=" + workerNode.Name,
 							})
@@ -506,6 +508,7 @@ spec:
 							time.Sleep(time.Duration(settleTimeout) * time.Second)
 
 							By(fmt.Sprintf("Checking nodeport flows have been updated to use new IP: %s", migrationWorkerNodeIP))
+							// FIXME breth0?
 							cmd := "ovs-ofctl dump-flows breth0 table=0"
 							err = wait.PollImmediate(framework.Poll, 30*time.Second, func() (bool, error) {
 								stdout, err := e2epodoutput.RunHostCmdWithRetries(ovnkPod.Namespace, ovnkPod.Name, cmd, framework.Poll, 30*time.Second)
@@ -538,7 +541,7 @@ spec:
 	When("when MAC address changes", func() {
 		BeforeEach(func() {
 			By("Storing original MAC")
-			ovnkubeNodePods, err := f.ClientSet.CoreV1().Pods("ovn-kubernetes").List(context.TODO(), metav1.ListOptions{
+			ovnkubeNodePods, err := f.ClientSet.CoreV1().Pods(deployment.Get().OVNKubernetesNamespace()).List(context.TODO(), metav1.ListOptions{
 				LabelSelector: "app=ovnkube-node",
 				FieldSelector: "spec.nodeName=" + workerNode.Name,
 			})
@@ -620,6 +623,7 @@ func checkFlowsForMACPeriodically(ovnkPod v1.Pod, addr net.HardwareAddr, duratio
 }
 
 func checkFlowsForMAC(ovnkPod v1.Pod, mac net.HardwareAddr) error {
+	// FIXME breth0?
 	cmd := "ovs-ofctl dump-flows breth0"
 	flowOutput := e2epodoutput.RunHostCmdOrDie(ovnkPod.Namespace, ovnkPod.Name, cmd)
 	lines := strings.Split(flowOutput, "\n")
@@ -639,14 +643,14 @@ func checkFlowsForMAC(ovnkPod v1.Pod, mac net.HardwareAddr) error {
 
 func setMACAddress(ovnkubePod v1.Pod, mac string) error {
 	cmd := []string{"kubectl", "-n", ovnkubePod.Namespace, "exec", ovnkubePod.Name, "-c", "ovn-controller",
-		"--", "ovs-vsctl", "set", "bridge", "breth0", fmt.Sprintf("other-config:hwaddr=%s", mac)}
+		"--", "ovs-vsctl", "set", "bridge", deployment.Get().ExternalBridgeName(), fmt.Sprintf("other-config:hwaddr=%s", mac)}
 	_, err := runCommand(cmd...)
 	return err
 }
 
 func getMACAddress(ovnkubePod v1.Pod) (net.HardwareAddr, error) {
 	cmd := []string{"kubectl", "-n", ovnkubePod.Namespace, "exec", ovnkubePod.Name, "-c", "ovn-controller",
-		"--", "ip", "link", "show", "breth0"}
+		"--", "ip", "link", "show", deployment.Get().ExternalBridgeName()}
 	output, err := runCommand(cmd...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ip link output: %w", err)
@@ -862,7 +866,7 @@ func isAddressReachableFromContainer(containerName, targetIP string) (bool, erro
 
 func isOVNEncapIPReady(nodeName, nodeIP, ovnkubePodName string) bool {
 	framework.Logf("Verifying ovn-encap-ip for node %s", nodeName)
-	cmd := []string{"kubectl", "-n", "ovn-kubernetes", "exec", ovnkubePodName, "-c", "ovn-controller",
+	cmd := []string{"kubectl", "-n", deployment.Get().OVNKubernetesNamespace(), "exec", ovnkubePodName, "-c", "ovn-controller",
 		"--", "ovs-vsctl", "get", "open_vswitch", ".", "external-ids:ovn-encap-ip"}
 	output, err := runCommand(cmd...)
 	if err != nil {

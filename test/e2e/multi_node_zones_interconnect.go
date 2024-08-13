@@ -9,6 +9,8 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 
+	"github.com/ovn-org/ovn-kubernetes/test/e2e/deployment"
+
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -40,7 +42,7 @@ func changeNodeZone(node *v1.Node, zone string, cs clientset.Interface) error {
 	framework.ExpectNoError(err)
 
 	// Restart the ovnkube-node on this node
-	err = restartOVNKubeNodePod(cs, "ovn-kubernetes", node.Name)
+	err = restartOVNKubeNodePod(cs, deployment.Get().OVNKubernetesNamespace(), node.Name)
 	framework.ExpectNoError(err)
 
 	// Verify that the node is moved to the expected zone

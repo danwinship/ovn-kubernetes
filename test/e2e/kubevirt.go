@@ -13,6 +13,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/ovn-org/ovn-kubernetes/test/e2e/deployment"
 	"github.com/ovn-org/ovn-kubernetes/test/e2e/diagnostics"
 	"github.com/ovn-org/ovn-kubernetes/test/e2e/kubevirt"
 
@@ -287,7 +288,7 @@ passwd:
 			nodePort := fmt.Sprintf("%d", svc.Spec.Ports[0].NodePort)
 			port := fmt.Sprintf("%d", svc.Spec.Ports[0].Port)
 
-			d.TCPDumpDaemonSet([]string{"any", "eth0", "breth0"}, fmt.Sprintf("port %s or port %s", port, nodePort))
+			d.TCPDumpDaemonSet([]string{"any", "eth0", deployment.Get().ExternalBridgeName()}, fmt.Sprintf("port %s or port %s", port, nodePort))
 			for _, address := range worker.Status.Addresses {
 				if address.Type != corev1.NodeHostName {
 					addr := net.JoinHostPort(address.Address, nodePort)
@@ -755,7 +756,7 @@ passwd:
 		Expect(err).ToNot(HaveOccurred())
 
 		d.ConntrackDumpingDaemonSet()
-		d.OVSFlowsDumpingDaemonSet("breth0")
+		d.OVSFlowsDumpingDaemonSet("breth0") // FIXME breth0?
 		d.IPTablesDumpingDaemonSet()
 
 		bandwidthPerMigration := resource.MustParse("40Mi")

@@ -6,6 +6,8 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 
+	"github.com/ovn-org/ovn-kubernetes/test/e2e/deployment"
+
 	"k8s.io/kubernetes/test/e2e/framework"
 	e2enode "k8s.io/kubernetes/test/e2e/framework/node"
 )
@@ -24,14 +26,14 @@ var _ = ginkgo.Describe("OVS CPU affinity pinning", func() {
 		_, err = runCommand(containerRuntime, "exec", nodeWithEnabledOvsAffinityPinning, "bash", "-c", "echo 1 > /etc/openvswitch/enable_dynamic_cpu_affinity")
 		gomega.Expect(err).ToNot(gomega.HaveOccurred())
 
-		restartOVNKubeNodePodsInParallel(f.ClientSet, ovnNamespace, nodeWithEnabledOvsAffinityPinning, nodeWithDisabledOvsAffinityPinning)
+		restartOVNKubeNodePodsInParallel(f.ClientSet, deployment.Get().OVNKubernetesNamespace(), nodeWithEnabledOvsAffinityPinning, nodeWithDisabledOvsAffinityPinning)
 
-		enabledNodeLogs, err := getOVNKubePodLogsFiltered(f.ClientSet, ovnNamespace, nodeWithEnabledOvsAffinityPinning, ".*ovspinning_linux.go.*$")
+		enabledNodeLogs, err := getOVNKubePodLogsFiltered(f.ClientSet, deployment.Get().OVNKubernetesNamespace(), nodeWithEnabledOvsAffinityPinning, ".*ovspinning_linux.go.*$")
 		gomega.Expect(err).ToNot(gomega.HaveOccurred())
 
 		gomega.Expect(enabledNodeLogs).To(gomega.ContainSubstring("Starting OVS daemon CPU pinning"))
 
-		disabledNodeLogs, err := getOVNKubePodLogsFiltered(f.ClientSet, ovnNamespace, nodeWithDisabledOvsAffinityPinning, ".*ovspinning_linux.go.*$")
+		disabledNodeLogs, err := getOVNKubePodLogsFiltered(f.ClientSet, deployment.Get().OVNKubernetesNamespace(), nodeWithDisabledOvsAffinityPinning, ".*ovspinning_linux.go.*$")
 		gomega.Expect(err).ToNot(gomega.HaveOccurred())
 		gomega.Expect(disabledNodeLogs).To(gomega.ContainSubstring("OVS CPU affinity pinning disabled"))
 	})

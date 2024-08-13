@@ -138,7 +138,6 @@ var _ = ginkgo.Describe("Multicast", func() {
 var _ = ginkgo.Describe("e2e IGMP validation", func() {
 	const (
 		svcname              string = "igmp-test"
-		ovnNs                string = "ovn-kubernetes"
 		mcastGroup           string = "224.1.1.1"
 		mcastV6Group         string = "ff3e::4321:1234"
 		multicastListenerPod string = "multicast-listener-test-pod"

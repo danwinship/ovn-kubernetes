@@ -12,6 +12,7 @@ import (
 	"github.com/onsi/ginkgo/v2/reporters"
 	"github.com/onsi/gomega"
 
+	"github.com/ovn-org/ovn-kubernetes/test/e2e/deployment"
 	"github.com/ovn-org/ovn-kubernetes/test/e2e/diagnostics"
 
 	"k8s.io/client-go/tools/clientcmd"
@@ -54,6 +55,7 @@ var _ = ginkgo.BeforeSuite(func() {
 	framework.ExpectNoError(err)
 	_, err = framework.LoadConfig()
 	framework.ExpectNoError(err)
+	deployment.Set()
 })
 
 // required due to go1.13 issue: https://github.com/onsi/ginkgo/issues/602

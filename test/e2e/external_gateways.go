@@ -14,6 +14,7 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 
+	"github.com/ovn-org/ovn-kubernetes/test/e2e/deployment"
 	"github.com/ovn-org/ovn-kubernetes/test/e2e/images"
 
 	"github.com/google/go-cmp/cmp"
@@ -85,7 +86,6 @@ var _ = ginkgo.Describe("External Gateway", func() {
 	var _ = ginkgo.Describe("e2e non-vxlan external gateway and update validation", func() {
 		const (
 			svcname             string = "multiple-novxlan-externalgw"
-			ovnNs               string = "ovn-kubernetes"
 			ovnContainer        string = "ovnkube-node"
 			gwContainerNameAlt1 string = "gw-novxlan-test-container-alt1"
 			gwContainerNameAlt2 string = "gw-novxlan-test-container-alt2"
@@ -3241,10 +3241,11 @@ func pokeHostnameViaNC(podName, namespace, protocol, target string, port int) st
 // pokeConntrackEntries returns the number of conntrack entries that match the provided pattern, protocol and podIP
 func pokeConntrackEntries(nodeName, podIP, protocol string, patterns []string) int {
 	args := []string{"get", "pods", "--selector=app=ovs-node", "--field-selector", fmt.Sprintf("spec.nodeName=%s", nodeName), "-o", "jsonpath={.items..metadata.name}"}
-	ovsPodName, err := e2ekubectl.RunKubectl("ovn-kubernetes", args...)
+	ovnKubernetesNamespace := deployment.Get().OVNKubernetesNamespace()
+	ovsPodName, err := e2ekubectl.RunKubectl(ovnKubernetesNamespace, args...)
 	framework.ExpectNoError(err, "failed to get the ovs pod on node %s", nodeName)
 	args = []string{"exec", ovsPodName, "--", "ovs-appctl", "dpctl/dump-conntrack"}
-	conntrackEntries, err := e2ekubectl.RunKubectl("ovn-kubernetes", args...)
+	conntrackEntries, err := e2ekubectl.RunKubectl(ovnKubernetesNamespace, args...)
 	framework.ExpectNoError(err, "failed to get the conntrack entries from node %s", nodeName)
 	numOfConnEntries := 0
 	for _, connEntry := range strings.Split(conntrackEntries, "\n") {

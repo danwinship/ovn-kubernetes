@@ -15,6 +15,7 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 
+	"github.com/ovn-org/ovn-kubernetes/test/e2e/deployment"
 	"github.com/ovn-org/ovn-kubernetes/test/e2e/images"
 
 	v1 "k8s.io/api/core/v1"
@@ -37,7 +38,6 @@ import (
 )
 
 const (
-	ovnNamespace   = "ovn-kubernetes"
 	ovnNodeSubnets = "k8s.ovn.org/node-subnets"
 	// ovnNodeZoneNameAnnotation is the node annotation name to store the node zone name.
 	ovnNodeZoneNameAnnotation = "k8s.ovn.org/zone-name"
@@ -601,7 +601,7 @@ func waitClusterHealthy(f *framework.Framework, numControlPlanePods int, control
 			return false, nil
 		}
 
-		podClient := f.ClientSet.CoreV1().Pods("ovn-kubernetes")
+		podClient := f.ClientSet.CoreV1().Pods(deployment.Get().OVNKubernetesNamespace())
 		// Ensure all nodes are running and healthy
 		podList, err := podClient.List(context.Background(), metav1.ListOptions{
 			LabelSelector: "app=ovnkube-node",
@@ -999,7 +999,7 @@ func countACLLogs(targetNodeName string, policyNameRegex string, expectedACLVerd
 func getTemplateContainerEnv(namespace, resource, container, key string) string {
 	args := []string{"get", resource,
 		"-o=jsonpath='{.spec.template.spec.containers[?(@.name==\"" + container + "\")].env[?(@.name==\"" + key + "\")].value}'"}
-	value := e2ekubectl.RunKubectlOrDie(ovnNamespace, args...)
+	value := e2ekubectl.RunKubectlOrDie(namespace, args...)
 	return strings.Trim(value, "'")
 }
 
@@ -1035,6 +1035,7 @@ func allowOrDropNodeInputTrafficOnPort(op, nodeName, protocol, port string) {
 		framework.Failf("unsupported op %s", op)
 	}
 
+	ovnNamespace := deployment.Get().OVNKubernetesNamespace()
 	args := []string{"get", "pods", "--selector=app=ovnkube-node", "--field-selector", fmt.Sprintf("spec.nodeName=%s", nodeName), "-o", "jsonpath={.items..metadata.name}"}
 	ovnKubePodName := e2ekubectl.RunKubectlOrDie(ovnNamespace, args...)
 
@@ -1097,7 +1098,7 @@ func isLocalGWModeEnabled() bool {
 func singleNodePerZone() bool {
 	if singleNodePerZoneResult == nil {
 		args := []string{"get", "pods", "--selector=app=ovnkube-node", "-o", "jsonpath={.items[0].spec.containers[*].name}"}
-		containerNames := e2ekubectl.RunKubectlOrDie(ovnNamespace, args...)
+		containerNames := e2ekubectl.RunKubectlOrDie(deployment.Get().OVNKubernetesNamespace(), args...)
 		result := true
 		for _, containerName := range strings.Split(containerNames, " ") {
 			if containerName == "ovnkube-node" {
@@ -1154,7 +1155,7 @@ func routeToNode(nodeName string, ips []string, mtu int, add bool) error {
 		var err error
 		cmd := []string{"docker", "exec", nodeName}
 		cmd = append(cmd, ipCmd...)
-		cmd = append(cmd, "route", ipOp, fmt.Sprintf("%s/%d", ip, mask), "dev", "breth0")
+		cmd = append(cmd, "route", ipOp, fmt.Sprintf("%s/%d", ip, mask), "dev", "breth0") // FIXME breth0?
 		if mtu != 0 {
 			cmd = append(cmd, "mtu", strconv.Itoa(mtu))
 		}
