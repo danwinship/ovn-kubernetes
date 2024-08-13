@@ -14,6 +14,7 @@ import (
 
 	"github.com/ovn-org/ovn-kubernetes/test/e2e/deployment"
 	"github.com/ovn-org/ovn-kubernetes/test/e2e/diagnostics"
+	"github.com/ovn-org/ovn-kubernetes/test/e2e/ipalloc"
 
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
@@ -50,12 +51,13 @@ func handleFlags() {
 var _ = ginkgo.BeforeSuite(func() {
 	// Make sure the framework's kubeconfig is set.
 	framework.ExpectNotEqual(framework.TestContext.KubeConfig, "", fmt.Sprintf("%s env var not set", clientcmd.RecommendedConfigPathEnvVar))
-
-	_, err := framework.LoadClientset()
+	kClientSet, err := framework.LoadClientset()
 	framework.ExpectNoError(err)
 	_, err = framework.LoadConfig()
 	framework.ExpectNoError(err)
 	deployment.Set()
+	err = ipalloc.InitPrimaryIPAllocator(kClientSet.CoreV1().Nodes())
+	framework.ExpectNoError(err, "failed to initialize node primary IP allocator")
 })
 
 // required due to go1.13 issue: https://github.com/onsi/ginkgo/issues/602

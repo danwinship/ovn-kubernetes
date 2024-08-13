@@ -19,6 +19,7 @@ import (
 
 	"github.com/ovn-org/ovn-kubernetes/test/e2e/deployment"
 	"github.com/ovn-org/ovn-kubernetes/test/e2e/images"
+	"github.com/ovn-org/ovn-kubernetes/test/e2e/ipalloc"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -768,26 +769,28 @@ spec:
 		e2enode.ExpectNodeHasLabel(context.TODO(), f.ClientSet, egress1Node.name, "k8s.ovn.org/egress-assignable", "dummy")
 
 		ginkgo.By("1. By setting a secondary IP on non-egress node acting as \"another node\"")
-		var otherDstIP string
+		var otherDstIP net.IP
+		var err error
 		if utilnet.IsIPv6String(egress2Node.nodeIP) {
-			otherDstIP = "fc00:f853:ccd:e793:ffff::1"
+			otherDstIP, err = ipalloc.NewPrimaryIPv6()
 		} else {
-			// TODO(mk): replace with non-repeating IP allocator
-			otherDstIP = "172.18.1.99"
+			otherDstIP, err = ipalloc.NewPrimaryIPv4()
 		}
-		_, err := runCommand(containerRuntime, "exec", egress2Node.name, "ip", "addr", "add", otherDstIP, "dev", deployment.Get().ExternalBridgeName())
+		framework.ExpectNoError(err, "failed to allocate a secondary IP")
+		otherDst := otherDstIP.String()
+		_, err = runCommand(containerRuntime, "exec", egress2Node.name, "ip", "addr", "add", otherDst, "dev", deployment.Get().ExternalBridgeName())
 		if err != nil {
 			framework.Failf("failed to add address to node %s: %v", egress2Node.name, err)
 		}
 		defer func() {
-			_, err = runCommand(containerRuntime, "exec", egress2Node.name, "ip", "addr", "delete", otherDstIP, "dev", deployment.Get().ExternalBridgeName())
+			_, err = runCommand(containerRuntime, "exec", egress2Node.name, "ip", "addr", "delete", otherDst, "dev", deployment.Get().ExternalBridgeName())
 			if err != nil {
 				framework.Failf("failed to remove address from node %s: %v", egress2Node.name, err)
 			}
 		}()
 		otherHostNetPodIP := node{
 			name:   egress2Node.name + "-host-net-pod",
-			nodeIP: otherDstIP,
+			nodeIP: otherDst,
 		}
 
 		ginkgo.By("2. Creating host-networked pod, on non-egress node acting as \"another node\"")

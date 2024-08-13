@@ -14,6 +14,7 @@ import (
 
 	"github.com/ovn-org/ovn-kubernetes/test/e2e/deployment"
 	"github.com/ovn-org/ovn-kubernetes/test/e2e/images"
+	"github.com/ovn-org/ovn-kubernetes/test/e2e/ipalloc"
 
 	"golang.org/x/sync/errgroup"
 	v1 "k8s.io/api/core/v1"
@@ -383,20 +384,22 @@ spec:
 				}
 			}
 			ginkgo.By("By setting a secondary IP on non-egress node acting as \"another node\"")
-			var otherDstIP string
+			var otherDstIP net.IP
 			if protocol == v1.IPv6Protocol {
-				otherDstIP = "fc00:f853:ccd:e793:ffff::1"
+				otherDstIP, err = ipalloc.NewPrimaryIPv6()
 			} else {
-				// TODO(mk): replace with non-repeating IP allocator
-				otherDstIP = "172.18.1.1"
+				otherDstIP, err = ipalloc.NewPrimaryIPv4()
 			}
+			framework.ExpectNoError(err, "failed to allocate secondary node IP")
+			otherDst := otherDstIP.String()
+			ginkgo.By(fmt.Sprintf("adding secondary IP %q to node %s", otherDst, dstNode.Name))
 			extBridgeName := deployment.Get().ExternalBridgeName()
-			_, err = runCommand(containerRuntime, "exec", dstNode.Name, "ip", "addr", "add", otherDstIP, "dev", extBridgeName)
+			_, err = runCommand(containerRuntime, "exec", dstNode.Name, "ip", "addr", "add", otherDst, "dev", extBridgeName)
 			if err != nil {
 				framework.Failf("failed to add address to node %s: %v", dstNode.Name, err)
 			}
 			defer func() {
-				_, err = runCommand(containerRuntime, "exec", dstNode.Name, "ip", "addr", "delete", otherDstIP, "dev", extBridgeName)
+				_, err = runCommand(containerRuntime, "exec", dstNode.Name, "ip", "addr", "delete", otherDst, "dev", extBridgeName)
 				if err != nil {
 					framework.Failf("failed to remove address from node %s: %v", dstNode.Name, err)
 				}
@@ -429,7 +432,7 @@ spec:
 					return curlAgnHostClientIPFromPod(f.Namespace.Name, pod, expectedsrcIP, dstIP, podHTTPPort)
 				}, 1*time.Second, 200*time.Millisecond).ShouldNot(gomega.HaveOccurred(), "failed to reach other node with node's primary ip")
 				gomega.Consistently(func() error {
-					return curlAgnHostClientIPFromPod(f.Namespace.Name, pod, expectedsrcIP, otherDstIP, podHTTPPort)
+					return curlAgnHostClientIPFromPod(f.Namespace.Name, pod, expectedsrcIP, otherDst, podHTTPPort)
 				}, 1*time.Second, 200*time.Millisecond).ShouldNot(gomega.HaveOccurred(), "failed to reach other node with node's secondary ip")
 			}
 		},
