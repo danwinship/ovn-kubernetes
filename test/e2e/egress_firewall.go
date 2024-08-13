@@ -29,8 +29,7 @@ import (
 // is properly handled as defined in the crd configuration in the test.
 var _ = ginkgo.Describe("e2e egress firewall policy validation", func() {
 	const (
-		svcname string = "egress-firewall-policy"
-
+		svcname                string = "egress-firewall-policy"
 		ovnContainer           string = "ovnkube-node"
 		egressFirewallYamlFile string = "egress-fw.yml"
 		testTimeout            string = "5"
@@ -65,6 +64,7 @@ var _ = ginkgo.Describe("e2e egress firewall policy validation", func() {
 	}
 
 	f := wrappedTestFramework(svcname)
+
 	// node2ndaryIPs holds the nodeName as the key and the value is
 	// a map with ipFamily(v4 or v6) as the key and the secondaryIP as the value
 	// This is defined here globally to allow us to cleanup in AfterEach

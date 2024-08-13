@@ -1684,7 +1684,6 @@ spec:
 			framework.Failf("could not get expected srcIP!")
 		}
 	})
-
 })
 
 func getEndpointsForService(c clientset.Interface, namespace, serviceName string) (*v1.Endpoints, error) {
