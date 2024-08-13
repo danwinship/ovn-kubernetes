@@ -46,7 +46,6 @@ var (
 var _ = ginkgo.Describe("Services", func() {
 	const (
 		serviceName               = "testservice"
-		ovnWorkerNode             = "ovn-worker"
 		echoServerPodNameTemplate = "echo-server-pod-%d"
 		echoClientPodName         = "echo-client-pod"
 		echoServiceNameTemplate   = "echo-service-%d"
@@ -490,8 +489,9 @@ var _ = ginkgo.Describe("Services", func() {
 		if v4NodeAddrs == "" && v6NodeAddrs == "" {
 			framework.Failf("unable to detect if cluster supports IPv4 or IPv6")
 		}
+		nodeName := nodes.Items[0].Name
 		getIPRouteGetOutput := func(dst string) string {
-			cmd := []string{containerRuntime, "exec", ovnWorkerNode, "ip"}
+			cmd := []string{containerRuntime, "exec", nodeName, "ip"}
 			if utilnet.IsIPv6String(dst) {
 				cmd = append(cmd, "-6")
 			}

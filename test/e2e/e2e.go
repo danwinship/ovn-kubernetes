@@ -854,10 +854,16 @@ var _ = ginkgo.Describe("e2e control plane", func() {
 	})
 
 	ginkgo.Describe("test node readiness according to its defaults interface MTU size", func() {
-		const testNodeName = "ovn-worker"
+		var testNodeName string
 		var originalMTU int
 
 		ginkgo.BeforeEach(func() {
+			nodes, err := e2enode.GetBoundedReadySchedulableNodes(context.TODO(), f.ClientSet, 1)
+			framework.ExpectNoError(err)
+			if len(nodes.Items) < 1 {
+				framework.Failf("Test requires >= 1 Ready nodes, but there are only %v nodes", len(nodes.Items))
+			}
+			testNodeName = nodes.Items[0].Name
 			// get the interface current mtu and store it as original value to be able to reset it after the test
 			res, err := runCommand(containerRuntime, "exec", testNodeName, "cat", "/sys/class/net/breth0/mtu")
 			if err != nil {
@@ -933,13 +939,12 @@ var _ = ginkgo.Describe("e2e control plane", func() {
 
 // Test pod connectivity to other host IP addresses
 var _ = ginkgo.Describe("test e2e pod connectivity to host addresses", func() {
-	const (
-		ovnWorkerNode string = "ovn-worker"
-		svcname       string = "node-e2e-to-host"
-	)
+	const svcname string = "node-e2e-to-host"
+
 	var (
-		targetIP     string
-		singleIPMask string
+		targetIP       string
+		singleIPMask   string
+		workerNodeName string
 	)
 
 	f := wrappedTestFramework(svcname)
@@ -951,33 +956,37 @@ var _ = ginkgo.Describe("test e2e pod connectivity to host addresses", func() {
 			targetIP = "2001:db8:3333:4444:CCCC:DDDD:EEEE:FFFF"
 			singleIPMask = "128"
 		}
+		nodes, err := e2enode.GetBoundedReadySchedulableNodes(context.TODO(), f.ClientSet, 1)
+		framework.ExpectNoError(err)
+		if len(nodes.Items) < 1 {
+			framework.Failf("Test requires >= 1 Ready nodes, but there are only %v nodes", len(nodes.Items))
+		}
+		workerNodeName = nodes.Items[0].Name
 		// Add another IP address to the worker
-		_, err := runCommand(containerRuntime, "exec", ovnWorkerNode, "ip", "a", "add",
+		_, err = runCommand(containerRuntime, "exec", workerNodeName, "ip", "a", "add",
 			fmt.Sprintf("%s/%s", targetIP, singleIPMask), "dev", "breth0")
-		framework.ExpectNoError(err, "failed to add IP to %s", ovnWorkerNode)
+		framework.ExpectNoError(err, "failed to add IP to %s", workerNodeName)
 	})
 
 	ginkgo.AfterEach(func() {
-		_, err := runCommand(containerRuntime, "exec", ovnWorkerNode, "ip", "a", "del",
+		_, err := runCommand(containerRuntime, "exec", workerNodeName, "ip", "a", "del",
 			fmt.Sprintf("%s/%s", targetIP, singleIPMask), "dev", "breth0")
-		framework.ExpectNoError(err, "failed to remove IP from %s", ovnWorkerNode)
+		framework.ExpectNoError(err, "failed to remove IP from %s", workerNodeName)
 	})
 
 	ginkgo.It("Should validate connectivity from a pod to a non-node host address on same node", func() {
 		// Spin up another pod that attempts to reach the previously started pod on separate nodes
 		framework.ExpectNoError(
-			checkConnectivityPingToHost(f, ovnWorkerNode, "e2e-src-ping-pod", targetIP, ipv4PingCommand, 30))
+			checkConnectivityPingToHost(f, workerNodeName, "e2e-src-ping-pod", targetIP, ipv4PingCommand, 30))
 	})
 })
 
 // Test e2e inter-node connectivity over br-int
 var _ = ginkgo.Describe("test e2e inter-node connectivity between worker nodes", func() {
 	const (
-		svcname        string = "inter-node-e2e"
-		ovnNs          string = "ovn-kubernetes"
-		ovnWorkerNode  string = "ovn-worker"
-		ovnWorkerNode2 string = "ovn-worker2"
-		getPodIPRetry  int    = 20
+		svcname       string = "inter-node-e2e"
+		ovnNs         string = "ovn-kubernetes"
+		getPodIPRetry int    = 20
 	)
 
 	f := wrappedTestFramework(svcname)
@@ -989,9 +998,14 @@ var _ = ginkgo.Describe("test e2e inter-node connectivity between worker nodes",
 		var ciWorkerNodeDst string
 		dstPingPodName := "e2e-dst-ping-pod"
 		command := []string{"bash", "-c", "sleep 20000"}
-		// non-ha ci mode runs a named set of nodes with a prefix of ovn-worker
-		ciWorkerNodeSrc = ovnWorkerNode
-		ciWorkerNodeDst = ovnWorkerNode2
+
+		nodes, err := e2enode.GetBoundedReadySchedulableNodes(context.TODO(), f.ClientSet, 2)
+		framework.ExpectNoError(err)
+		if len(nodes.Items) < 2 {
+			framework.Failf("Test requires >= 2 Ready nodes, but there are only %v nodes", len(nodes.Items))
+		}
+		ciWorkerNodeSrc = nodes.Items[0].Name
+		ciWorkerNodeDst = nodes.Items[1].Name
 
 		ginkgo.By(fmt.Sprintf("Creating a container on node %s and verifying connectivity to a pod on node %s", ciWorkerNodeSrc, ciWorkerNodeDst))
 
@@ -1944,8 +1958,6 @@ var _ = ginkgo.Describe("e2e delete databases", func() {
 		northDBFileName   string = "ovnnb_db.db"
 		southDBFileName   string = "ovnsb_db.db"
 		dirDB             string = "/etc/ovn"
-		ovnWorkerNode     string = "ovn-worker"
-		ovnWorkerNode2    string = "ovn-worker2"
 		haModeMinDb       int    = 0
 		haModeMaxDb       int    = 2
 	)
@@ -2131,6 +2143,12 @@ var _ = ginkgo.Describe("e2e delete databases", func() {
 				DBFileNamesToDelete[i] = path.Join(dirDB, file)
 			}
 
+			nodes, err := e2enode.GetBoundedReadySchedulableNodes(context.TODO(), f.ClientSet, 2)
+			framework.ExpectNoError(err)
+			if len(nodes.Items) < 2 {
+				framework.Failf("Test requires >= 2 Ready nodes, but there are only %v nodes", len(nodes.Items))
+			}
+
 			framework.Logf("connectivity test before deleting db files")
 			framework.Logf("test simple connectivity from new pod to API server, before deleting db files")
 			singlePodConnectivityTest(f, "before-delete-db-files")
@@ -2138,7 +2156,7 @@ var _ = ginkgo.Describe("e2e delete databases", func() {
 			syncChan, errChan := make(chan string), make(chan error)
 			go func() {
 				defer ginkgo.GinkgoRecover()
-				twoPodsContinuousConnectivityTest(f, ovnWorkerNode, ovnWorkerNode2, syncChan, errChan)
+				twoPodsContinuousConnectivityTest(f, nodes.Items[0].Name, nodes.Items[1].Name, syncChan, errChan)
 			}()
 
 			select {

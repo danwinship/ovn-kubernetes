@@ -30,6 +30,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/retry"
+	e2enode "k8s.io/kubernetes/test/e2e/framework/node"
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 	utilnet "k8s.io/utils/net"
 	"k8s.io/utils/pointer"
@@ -277,10 +278,10 @@ passwd:
 			return conn, nil
 		}
 
-		dialServiceNodePort = func(svc *corev1.Service) ([]*net.TCPConn, error) {
-			worker, err := fr.ClientSet.CoreV1().Nodes().Get(context.TODO(), "ovn-worker", metav1.GetOptions{})
+		dialServiceNodePort = func(client kubernetes.Interface, svc *corev1.Service) ([]*net.TCPConn, error) {
+			worker, err := e2enode.GetRandomReadySchedulableNode(context.TODO(), client)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to find ready and schedulable node: %v", err)
 			}
 			endpoints := []*net.TCPConn{}
 			nodePort := fmt.Sprintf("%d", svc.Spec.Ports[0].NodePort)
@@ -708,7 +709,7 @@ passwd:
 			By("Wait some time for service to settle")
 			time.Sleep(2 * time.Second)
 
-			endpoints, err := dialServiceNodePort(svc)
+			endpoints, err := dialServiceNodePort(fr.ClientSet, svc)
 			Expect(err).ToNot(HaveOccurred(), step)
 
 			checkConnectivityAndNetworkPolicies(vm.Name, endpoints, "before live migration")

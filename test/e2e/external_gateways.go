@@ -84,11 +84,9 @@ var _ = ginkgo.Describe("External Gateway", func() {
 		const (
 			svcname             string = "multiple-novxlan-externalgw"
 			ovnNs               string = "ovn-kubernetes"
-			ovnWorkerNode       string = "ovn-worker"
 			ovnContainer        string = "ovnkube-node"
 			gwContainerNameAlt1 string = "gw-novxlan-test-container-alt1"
 			gwContainerNameAlt2 string = "gw-novxlan-test-container-alt2"
-			ovnControlNode      string = "ovn-control-plane"
 		)
 		var (
 			exGWRemoteIpAlt1 string
@@ -130,11 +128,13 @@ var _ = ginkgo.Describe("External Gateway", func() {
 			command := []string{"bash", "-c", "sleep 20000"}
 			testContainer := fmt.Sprintf("%s-container", srcPingPodName)
 			testContainerFlag := fmt.Sprintf("--container=%s", testContainer)
-			// non-ha ci mode runs a set of kind nodes prefixed with ovn-worker
-			ciWorkerNodeSrc := ovnWorkerNode
+
+			nodes, err := e2enode.GetBoundedReadySchedulableNodes(context.TODO(), f.ClientSet, 2)
+			framework.ExpectNoError(err, "failed to find 2 ready and schedulable nodes")
+			ciWorkerNodeSrc := nodes.Items[0].Name
 
 			// start the container that will act as an external gateway
-			_, err := runCommand(containerRuntime, "run", "-itd", "--privileged", "--network", externalContainerNetwork, "--name", gwContainerNameAlt1, agnhostImage)
+			_, err = runCommand(containerRuntime, "run", "-itd", "--privileged", "--network", externalContainerNetwork, "--name", gwContainerNameAlt1, agnhostImage)
 			if err != nil {
 				framework.Failf("failed to start external gateway test container %s: %v", gwContainerNameAlt1, err)
 			}
@@ -205,7 +205,7 @@ var _ = ginkgo.Describe("External Gateway", func() {
 			ginkgo.By(fmt.Sprintf("Verifying connectivity without vxlan to the updated annotation and initial external gateway %s and remote address %s", exGWIpAlt1, exGWRemoteIpAlt1))
 			_, err = e2ekubectl.RunKubectl(f.Namespace.Name, "exec", srcPingPodName, testContainerFlag, "--", "ping", "-w", "40", exGWRemoteIpAlt1)
 			if err != nil {
-				framework.Failf("Failed to ping the first gateway network %s from container %s on node %s: %v", exGWRemoteIpAlt1, ovnContainer, ovnWorkerNode, err)
+				framework.Failf("Failed to ping the first gateway network %s from container %s on node %s: %v", exGWRemoteIpAlt1, ovnContainer, ciWorkerNodeSrc, err)
 			}
 			// start the container that will act as a new external gateway that the tests will be updated to use
 			_, err = runCommand(containerRuntime, "run", "-itd", "--privileged", "--network", externalContainerNetwork, "--name", gwContainerNameAlt2, agnhostImage)
@@ -247,7 +247,7 @@ var _ = ginkgo.Describe("External Gateway", func() {
 			ginkgo.By(fmt.Sprintf("Verifying connectivity without vxlan to the updated annotation and new external gateway %s and remote IP %s", exGWRemoteIpAlt2, exGWIpAlt2))
 			_, err = e2ekubectl.RunKubectl(f.Namespace.Name, "exec", srcPingPodName, testContainerFlag, "--", "ping", "-w", "40", exGWRemoteIpAlt2)
 			if err != nil {
-				framework.Failf("Failed to ping the second gateway network %s from container %s on node %s: %v", exGWRemoteIpAlt2, ovnContainer, ovnWorkerNode, err)
+				framework.Failf("Failed to ping the second gateway network %s from container %s on node %s: %v", exGWRemoteIpAlt2, ovnContainer, ciWorkerNodeSrc, err)
 			}
 		})
 	})

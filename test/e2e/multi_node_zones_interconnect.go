@@ -89,6 +89,7 @@ func checkPodsInterconnectivity(clientPod, serverPod *v1.Pod, namespace string, 
 var _ = ginkgo.Describe("Multi node zones interconnect", func() {
 
 	const (
+		// FIXME node names
 		serverPodNodeName = "ovn-control-plane"
 		serverPodName     = "server-pod"
 		clientPodNodeName = "ovn-worker3"

@@ -19,6 +19,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/kubernetes/test/e2e/framework"
+	e2enode "k8s.io/kubernetes/test/e2e/framework/node"
 
 	mnpapi "github.com/k8snetworkplumbingwg/multi-networkpolicy/pkg/apis/k8s.cni.cncf.io/v1beta1"
 	mnpclient "github.com/k8snetworkplumbingwg/multi-networkpolicy/pkg/client/clientset/versioned/typed/k8s.cni.cncf.io/v1beta1"
@@ -258,14 +259,21 @@ var _ = Describe("Multi Homing", func() {
 
 	Context("multiple pods connected to the same OVN-K secondary network", func() {
 		const (
-			clientPodName     = "client-pod"
-			nodeHostnameKey   = "kubernetes.io/hostname"
-			port              = 9000
-			workerOneNodeName = "ovn-worker"
-			workerTwoNodeName = "ovn-worker2"
-			clientIP          = "192.168.200.10/24"
-			staticServerIP    = "192.168.200.20/24"
+			clientPodName   = "client-pod"
+			nodeHostnameKey = "kubernetes.io/hostname"
+			port            = 9000
+			clientIP        = "192.168.200.10/24"
+			staticServerIP  = "192.168.200.20/24"
 		)
+
+		var workerOneNodeName, workerTwoNodeName string
+
+		ginkgo.BeforeEach(func() {
+			nodes, err := e2enode.GetBoundedReadySchedulableNodes(context.TODO(), f.ClientSet, 2)
+			framework.ExpectNoError(err, "failed to retrieve schedulable nodes")
+			Expect(len(nodes.Items)).To(BeNumerically(">", 1))
+			workerOneNodeName, workerTwoNodeName = nodes.Items[0].Name, nodes.Items[1].Name
+		})
 
 		ginkgo.DescribeTable(
 			"can communicate over the secondary network",
