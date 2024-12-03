@@ -2243,9 +2243,9 @@ func deleteMasqueradeResources(link netlink.Link, staleMasqueradeIPs *config.Mas
 		}
 		subnets = append(subnets, masqIPNet)
 		neighborIPs = append(neighborIPs, staleMasqueradeIPs.V4OVNMasqueradeIP, staleMasqueradeIPs.V4DummyNextHopMasqueradeIP)
-		if err := nodeipt.DelRules(getStaleMasqueradeIptablesRules(staleMasqueradeIPs.V4OVNMasqueradeIP)); err != nil {
+		if err := clearStaleMasqueradeRules(staleMasqueradeIPs.V4OVNMasqueradeIP); err != nil {
 			aggregatedErrors = append(aggregatedErrors,
-				fmt.Errorf("failed to delete forwarding iptables rules for stale masquerade subnet %s: ", err))
+				fmt.Errorf("failed to delete forwarding rules for stale masquerade subnet %s: ", err))
 		}
 	}
 
@@ -2267,8 +2267,8 @@ func deleteMasqueradeResources(link netlink.Link, staleMasqueradeIPs *config.Mas
 		}
 		subnets = append(subnets, masqIPNet)
 		neighborIPs = append(neighborIPs, staleMasqueradeIPs.V6OVNMasqueradeIP, staleMasqueradeIPs.V6DummyNextHopMasqueradeIP)
-		if err := nodeipt.DelRules(getStaleMasqueradeIptablesRules(staleMasqueradeIPs.V6OVNMasqueradeIP)); err != nil {
-			return fmt.Errorf("failed to delete forwarding iptables rules for stale masquerade subnet %s: ", err)
+		if err := clearStaleMasqueradeRules(staleMasqueradeIPs.V6OVNMasqueradeIP); err != nil {
+			return fmt.Errorf("failed to delete forwarding rules for stale masquerade subnet %s: ", err)
 		}
 	}
 

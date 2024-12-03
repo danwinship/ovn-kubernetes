@@ -3589,16 +3589,7 @@ var _ = Describe("Node Operations", func() {
 						"OVN-KUBE-ETP":        []string{},
 						"OVN-KUBE-ITP":        []string{},
 					},
-					"filter": {
-						"FORWARD": []string{
-							"-d 169.254.169.1 -j ACCEPT",
-							"-s 169.254.169.1 -j ACCEPT",
-							"-d 172.16.1.0/24 -j ACCEPT",
-							"-s 172.16.1.0/24 -j ACCEPT",
-							"-d 10.1.0.0/16 -j ACCEPT",
-							"-s 10.1.0.0/16 -j ACCEPT",
-						},
-					},
+					"filter": {},
 					"mangle": {
 						"OUTPUT": []string{
 							"-j OVN-KUBE-ITP",
@@ -3609,10 +3600,7 @@ var _ = Describe("Node Operations", func() {
 
 				Expect(configureGlobalForwarding()).To(Succeed())
 				f4 := iptV4.(*util.FakeIPTables)
-				err = f4.MatchState(expectedTables, map[util.FakePolicyKey]string{{
-					Table: "filter",
-					Chain: "FORWARD",
-				}: "DROP"})
+				err = f4.MatchState(expectedTables, nil)
 				Expect(err).NotTo(HaveOccurred())
 				expectedTables = map[string]util.FakeTable{
 					"nat":    {},
@@ -3623,7 +3611,11 @@ var _ = Describe("Node Operations", func() {
 				err = f6.MatchState(expectedTables, nil)
 				Expect(err).NotTo(HaveOccurred())
 
-				// Enable forwarding and test deletion of iptables rules from FORWARD chain
+				expectedNFT := nftablesRulesBaseFmt + nftablesRulesForward
+				err = nodenft.MatchNFTRules(expectedNFT, nft.Dump())
+				Expect(err).NotTo(HaveOccurred())
+
+				// Enable forwarding and test deletion of nftables forwarding rules
 				config.Gateway.DisableForwarding = false
 				fNPW.watchFactory = wf
 				Expect(configureGlobalForwarding()).To(Succeed())
@@ -3645,9 +3637,7 @@ var _ = Describe("Node Operations", func() {
 						"OVN-KUBE-ETP":        []string{},
 						"OVN-KUBE-ITP":        []string{},
 					},
-					"filter": {
-						"FORWARD": []string{},
-					},
+					"filter": {},
 					"mangle": {
 						"OUTPUT": []string{
 							"-j OVN-KUBE-ITP",
@@ -3657,10 +3647,7 @@ var _ = Describe("Node Operations", func() {
 				}
 
 				f4 = iptV4.(*util.FakeIPTables)
-				err = f4.MatchState(expectedTables, map[util.FakePolicyKey]string{{
-					Table: "filter",
-					Chain: "FORWARD",
-				}: "ACCEPT"})
+				err = f4.MatchState(expectedTables, nil)
 				Expect(err).NotTo(HaveOccurred())
 				expectedTables = map[string]util.FakeTable{
 					"nat":    {},
@@ -3670,6 +3657,11 @@ var _ = Describe("Node Operations", func() {
 				f6 = iptV6.(*util.FakeIPTables)
 				err = f6.MatchState(expectedTables, nil)
 				Expect(err).NotTo(HaveOccurred())
+
+				expectedNFT = nftablesRulesBaseFmt
+				err = nodenft.MatchNFTRules(expectedNFT, nft.Dump())
+				Expect(err).NotTo(HaveOccurred())
+
 				return nil
 			}
 			err := app.Run([]string{app.Name})

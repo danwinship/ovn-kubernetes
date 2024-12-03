@@ -92,6 +92,21 @@ add rule inet ovn-kubernetes ovn-kube-local-gw-masq ip saddr 169.254.169.1 masqu
 add rule inet ovn-kubernetes ovn-kube-local-gw-masq jump ovn-kube-pod-subnet-masq
 add chain inet ovn-kubernetes ovn-kube-pod-subnet-masq
 add rule inet ovn-kubernetes ovn-kube-pod-subnet-masq ip saddr 10.1.1.0/24 masquerade
+add chain inet ovn-kubernetes gateway-forward-local { type filter hook forward priority -1 ; }
+add rule inet ovn-kubernetes gateway-forward-local iifname "` + types.K8sMgmtIntfName + `" accept
+add rule inet ovn-kubernetes gateway-forward-local oifname "` + types.K8sMgmtIntfName + `" accept
+`
+
+// The additional rules expected if initExternalBridgeServiceForwardingRules() is called.
+const nftablesRulesForward = `
+add chain inet ovn-kubernetes gateway-forward { type filter hook forward priority 0 ; }
+add set inet ovn-kubernetes gateway-forward-accept-v4 { type ipv4_addr ; flags interval ; }
+add rule inet ovn-kubernetes gateway-forward ip saddr @gateway-forward-accept-v4 accept
+add rule inet ovn-kubernetes gateway-forward ip daddr @gateway-forward-accept-v4 accept
+add rule inet ovn-kubernetes gateway-forward drop
+add element inet ovn-kubernetes gateway-forward-accept-v4 { 169.254.169.1 }
+add element inet ovn-kubernetes gateway-forward-accept-v4 { 172.16.1.0/24 }
+add element inet ovn-kubernetes gateway-forward-accept-v4 { 10.1.0.0/16 }
 `
 
 func shareGatewayInterfaceTest(app *cli.App, testNS ns.NetNS,
@@ -1400,18 +1415,7 @@ OFPT_GET_CONFIG_REPLY (xid=0x4): frags=normal miss_send_len=0`
 				"OVN-KUBE-ETP": []string{},
 				"OVN-KUBE-ITP": []string{},
 			},
-			"filter": {
-				"FORWARD": []string{
-					"-d 169.254.169.1 -j ACCEPT",
-					"-s 169.254.169.1 -j ACCEPT",
-					"-d 172.16.1.0/24 -j ACCEPT",
-					"-s 172.16.1.0/24 -j ACCEPT",
-					"-d 10.1.0.0/16 -j ACCEPT",
-					"-s 10.1.0.0/16 -j ACCEPT",
-					"-i ovn-k8s-mp0 -j ACCEPT",
-					"-o ovn-k8s-mp0 -j ACCEPT",
-				},
-			},
+			"filter": {},
 			"mangle": {
 				"OUTPUT": []string{
 					"-j OVN-KUBE-ITP",
@@ -1420,10 +1424,7 @@ OFPT_GET_CONFIG_REPLY (xid=0x4): frags=normal miss_send_len=0`
 			},
 		}
 		f4 := iptV4.(*util.FakeIPTables)
-		err = f4.MatchState(expectedTables, map[util.FakePolicyKey]string{{
-			Table: "filter",
-			Chain: "FORWARD",
-		}: "DROP"})
+		err = f4.MatchState(expectedTables, nil)
 		Expect(err).NotTo(HaveOccurred())
 
 		expectedTables = map[string]util.FakeTable{
@@ -1435,7 +1436,7 @@ OFPT_GET_CONFIG_REPLY (xid=0x4): frags=normal miss_send_len=0`
 		err = f6.MatchState(expectedTables, nil)
 		Expect(err).NotTo(HaveOccurred())
 
-		expectedNFT := nftablesRulesBase + nftablesRulesLocalGateway
+		expectedNFT := nftablesRulesBase + nftablesRulesLocalGateway + nftablesRulesForward
 		if util.IsNetworkSegmentationSupportEnabled() {
 			expectedNFT += nftablesRulesUDN
 		}
