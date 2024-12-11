@@ -98,6 +98,30 @@ func TestAddObjects(t *testing.T) {
 				add element inet ovn-kubernetes testmap { 10.0.0.1 : 9.9.9.9 }
 			`,
 		},
+		{
+			name: "add rule",
+			initial: `
+				add chain inet ovn-kubernetes testchain
+				add rule inet ovn-kubernetes testchain ip saddr 1.2.3.4 drop
+			`,
+			objs: []knftables.Object{
+				&knftables.Rule{
+					Chain: "testchain",
+					Rule: "ip saddr 5.6.7.8 drop",
+				},
+				&knftables.Rule{
+					Chain: "testchain",
+					Rule: "ip saddr 1.2.3.4 drop",
+				},
+			},
+			final: `
+				add table inet ovn-kubernetes
+				add chain inet ovn-kubernetes testchain
+				add rule inet ovn-kubernetes testchain ip saddr 1.2.3.4 drop
+				add rule inet ovn-kubernetes testchain ip saddr 5.6.7.8 drop
+				add rule inet ovn-kubernetes testchain ip saddr 1.2.3.4 drop
+			`,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fake := SetFakeNFTablesHelper()
@@ -233,6 +257,34 @@ func TestDeleteObjects(t *testing.T) {
 				add element inet ovn-kubernetes testmap { 10.0.0.4 : 6.6.6.6 }
 			`,
 		},
+		{
+			name: "delete rules",
+			initial: `
+				add chain inet ovn-kubernetes testchain
+				add rule inet ovn-kubernetes testchain ip saddr 1.2.3.4 drop comment "one"
+				add rule inet ovn-kubernetes testchain ip saddr 5.6.7.8 drop comment "two"
+				add rule inet ovn-kubernetes testchain ip saddr 9.1.2.3 drop comment "two"
+				add rule inet ovn-kubernetes testchain ip saddr 4.5.6.7 drop comment "three"
+			`,
+			objs: []knftables.Object{
+				&knftables.Rule{
+					Chain: "testchain",
+					Rule: "ip saddr 5.6.7.8 drop",
+					Comment: knftables.PtrTo("two"),
+				},
+				&knftables.Rule{
+					Chain: "testchain",
+					Rule: "ip saddr 1.2.3.4 drop",
+					Comment: knftables.PtrTo("no match"),
+				},
+			},
+			final: `
+				add table inet ovn-kubernetes
+				add chain inet ovn-kubernetes testchain
+				add rule inet ovn-kubernetes testchain ip saddr 1.2.3.4 drop comment "one"
+				add rule inet ovn-kubernetes testchain ip saddr 4.5.6.7 drop comment "three"
+			`,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fake := SetFakeNFTablesHelper()
@@ -320,6 +372,39 @@ func TestSyncObjects(t *testing.T) {
 				add element inet ovn-kubernetes becomes-empty { 1.1.1.1 }
 				add element inet ovn-kubernetes becomes-empty { 2.2.2.2 }
 				add element inet ovn-kubernetes becomes-empty { 3.3.3.3 }
+			`,
+		},
+		{
+			name: "sync rules",
+			initial: `
+				add chain inet ovn-kubernetes testchain
+				add rule inet ovn-kubernetes testchain ip saddr 1.2.3.4 drop comment "one"
+				add rule inet ovn-kubernetes testchain ip saddr 5.6.7.8 drop comment "two"
+				add rule inet ovn-kubernetes testchain ip saddr 9.1.2.3 drop comment "two"
+				add rule inet ovn-kubernetes testchain ip saddr 4.5.6.7 drop comment "three"
+			`,
+			containers: []knftables.Object{
+				&knftables.Chain{
+					Name: "testchain",
+				},
+			},
+			contents: []knftables.Object{
+				&knftables.Rule{
+					Chain: "testchain",
+					Rule: "ip saddr 1.2.3.4 drop",
+					Comment: knftables.PtrTo("one"),
+				},
+				&knftables.Rule{
+					Chain: "testchain",
+					Rule: "ip saddr 9.1.2.3 drop",
+					Comment: knftables.PtrTo("two"),
+				},
+			},
+			final: `
+				add table inet ovn-kubernetes
+				add chain inet ovn-kubernetes testchain
+				add rule inet ovn-kubernetes testchain ip saddr 1.2.3.4 drop comment "one"
+				add rule inet ovn-kubernetes testchain ip saddr 9.1.2.3 drop comment "two"
 			`,
 		},
 	} {
