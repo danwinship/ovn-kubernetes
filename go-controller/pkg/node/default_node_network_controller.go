@@ -1278,7 +1278,7 @@ func (nc *DefaultNodeNetworkController) WatchNodes() error {
 
 // addOrUpdateNode handles creating flows or nftables rules for each node to handle PMTUD
 func (nc *DefaultNodeNetworkController) addOrUpdateNode(node *corev1.Node) error {
-	var nftElems []*knftables.Element
+	var nftElems []knftables.Object
 	var addrs []string
 
 	// Use GetNodeAddresses to get all node IPs (including current node for openflow)
@@ -1312,8 +1312,9 @@ func (nc *DefaultNodeNetworkController) addOrUpdateNode(node *corev1.Node) error
 			})
 		}
 	}
+
 	if config.OvnKubeNode.Mode != types.NodeModeDPU && len(nftElems) > 0 {
-		if err := nodenft.UpdateNFTElements(nftElems); err != nil {
+		if err := nodenft.AddObjects(context.TODO(), nftElems); err != nil {
 			return fmt.Errorf("unable to update NFT elements for node %q, error: %w", node.Name, err)
 		}
 	}
@@ -1325,7 +1326,7 @@ func (nc *DefaultNodeNetworkController) addOrUpdateNode(node *corev1.Node) error
 }
 
 func removePMTUDNodeNFTRules(nodeIPs []net.IP) error {
-	var nftElems []*knftables.Element
+	var nftElems []knftables.Object
 	for _, nodeIP := range nodeIPs {
 		// Remove IPs from NFT sets
 		if utilnet.IsIPv4(nodeIP) {
@@ -1341,7 +1342,7 @@ func removePMTUDNodeNFTRules(nodeIPs []net.IP) error {
 		}
 	}
 	if len(nftElems) > 0 {
-		if err := nodenft.DeleteNFTElements(nftElems); err != nil {
+		if err := nodenft.DeleteObjects(context.TODO(), nftElems); err != nil {
 			return err
 		}
 	}
@@ -1370,7 +1371,7 @@ func (nc *DefaultNodeNetworkController) deleteNode(node *corev1.Node) {
 }
 
 func (nc *DefaultNodeNetworkController) syncNodes(objs []interface{}) error {
-	var keepNFTSetElemsV4, keepNFTSetElemsV6 []*knftables.Element
+	var keepNFTSetElemsV4, keepNFTSetElemsV6 []knftables.Object
 	var errors []error
 
 	if config.OvnKubeNode.Mode == types.NodeModeDPU {
