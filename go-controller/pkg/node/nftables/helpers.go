@@ -7,6 +7,8 @@ import (
 	"context"
 
 	"sigs.k8s.io/knftables"
+
+	"github.com/ovn-org/ovn-kubernetes/go-controller/pkg/util"
 )
 
 const OVNKubernetesNFTablesName = "ovn-kubernetes"
@@ -28,7 +30,16 @@ func SetFakeNFTablesHelper() *knftables.Fake {
 // called, it will create a "real" knftables.Interface
 func GetNFTablesHelper() (knftables.Interface, error) {
 	if nftHelper == nil {
-		nft, err := knftables.New(knftables.InetFamily, OVNKubernetesNFTablesName, knftables.RequireDestroy)
+		var options []knftables.Option
+		if util.IsNetworkSegmentationSupportEnabled() {
+			options = append(options, knftables.RequireDestroy)
+		} else {
+			// This makes tx.Destroy() emulate `nft destroy` if it can when
+			// it's not available, which will work for everything except the
+			// UDN stuff.
+			options = append(options, knftables.EmulateDestroy)
+		}
+		nft, err := knftables.New(knftables.InetFamily, OVNKubernetesNFTablesName, options...)
 		if err != nil {
 			return nil, err
 		}
