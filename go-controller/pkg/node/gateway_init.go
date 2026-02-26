@@ -499,7 +499,7 @@ func (nc *DefaultNodeNetworkController) initGatewayDPUHost() error {
 	// TODO(adrianc): revisit if support for nodeIPManager is needed.
 	gw := nc.Gateway.(*gateway)
 	if config.Gateway.NodeportEnable {
-		if err := initSharedGatewayIPTables(); err != nil {
+		if err := initGatewayNodePortNFTables(); err != nil {
 			return err
 		}
 		if util.IsNetworkSegmentationSupportEnabled() {
