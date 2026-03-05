@@ -20,7 +20,6 @@ import (
 	"github.com/ovn-kubernetes/ovn-kubernetes/go-controller/pkg/factory"
 	"github.com/ovn-kubernetes/ovn-kubernetes/go-controller/pkg/kube"
 	"github.com/ovn-kubernetes/ovn-kubernetes/go-controller/pkg/networkmanager"
-	nodenft "github.com/ovn-kubernetes/ovn-kubernetes/go-controller/pkg/node/nftables"
 	ovntest "github.com/ovn-kubernetes/ovn-kubernetes/go-controller/pkg/testing"
 	"github.com/ovn-kubernetes/ovn-kubernetes/go-controller/pkg/types"
 	"github.com/ovn-kubernetes/ovn-kubernetes/go-controller/pkg/util"
@@ -351,7 +350,6 @@ var _ = Describe("SyncServices", func() {
 		config.Gateway.Mode = config.GatewayModeLocal
 		config.IPv4Mode = true
 		config.IPv6Mode = false
-		_ = nodenft.SetFakeNFTablesHelper()
 
 		fakeClient = &util.OVNNodeClientset{
 			KubeClient: fake.NewSimpleClientset(),
